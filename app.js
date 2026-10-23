@@ -699,6 +699,39 @@ function play() {
   requestAnimationFrame(stepFn);
 }
 
+/* Eine Zeile der Zeichnung senden (PCLR oder P ...) und auf "@PATH want" warten.
+   Fix 23.10.2026: Geht die Bestaetigung unterwegs verloren, wird nicht sofort
+   abgebrochen. Stattdessen fragt die App mit STAT nach, wie viele Punkte der Roboter
+   hat ("pts="): stimmt die Zahl schon, war nur die Antwort weg; steht sie noch auf
+   dem alten Wert, kam die Zeile nicht an und wird wiederholt. So entstehen keine
+   doppelten Punkte. */
+async function sendPathLine(line, prev, want, tries = 4) {
+  let send = true;
+  for (let t = 1; t <= tries; t++) {
+    if (send) {
+      st.link.write(enc.encode(line + '\n'));
+      try {
+        const m = await expect(/^@PATH (\d+)$/, 5000);
+        if (+m[1] === want) return;
+        throw new Error(`Roboter meldet ${m[1]} statt ${want} Punkte`);
+      } catch (e) {
+        if (!/keine Antwort/.test(e.message)) throw e;
+      }
+    }
+    logLine(`Keine Bestätigung für ${line.startsWith('P ') ? 'Punkte ab ' + prev : line} – frage beim Roboter nach (Versuch ${t}/${tries}) …`, 'err');
+    let pts = null;
+    for (let k = 0; k < 2 && pts === null; k++) {
+      sendText('STAT');
+      try { pts = +(await expect(/^@STAT .*\bpts=(\d+)/, 4000, false))[1]; } catch (e) { /* nochmal */ }
+    }
+    if (pts === null) { send = false; continue; }   // Stand unbekannt: nicht blind wiederholen (doppelte Punkte)
+    if (pts === want) return;                       // angekommen, nur die Antwort fehlte
+    if (pts !== prev) throw new Error(`Roboter hat ${pts} Punkte, erwartet ${prev} – bitte neu senden`);
+    send = true;                                    // Zeile kam nicht an -> wiederholen
+  }
+  throw new Error('keine Antwort vom Roboter (mehrere Versuche). Firmware V13a aufgespielt? Siehe Protokoll.');
+}
+
 /* Zeichnung senden */
 async function sendDrawing() {
   if (!st.connected) { logLine('Erst verbinden.', 'err'); return; }
@@ -709,15 +742,13 @@ async function sendDrawing() {
   try {
     if (st.menu !== 8) { info.textContent = 'Wechsle in Menü 8 …'; sendText('MENU 8'); await expect(/^@OK MENU/); await new Promise(r => setTimeout(r, 300)); }
     info.textContent = 'Übertrage Zeichnung …';
-    sendText('PCLR'); await expect(/^@PATH 0$/);
+    logLine('> PCLR', 'tx');
+    await sendPathLine('PCLR', 0, 0);
     for (let i = 0; i < pts.length; i += POINTS_PER_LINE) {
       const chunk = pts.slice(i, i + POINTS_PER_LINE);
       const line = 'P ' + chunk.map(p => `${+p.x.toFixed(1)},${+p.y.toFixed(1)},${p.pen}`).join(';');
-      const want = i + chunk.length;
-      st.link.write(enc.encode(line + '\n'));      // nicht ins Protokoll, sonst wird es unlesbar
-      const m = await expect(/^@PATH (\d+)$/);
-      if (+m[1] !== want) throw new Error(`Roboter meldet ${m[1]} statt ${want} Punkte`);
-      pr.value = want;
+      await sendPathLine(line, i, i + chunk.length);   // nicht ins Protokoll, sonst wird es unlesbar
+      pr.value = i + chunk.length;
     }
     logLine(`Zeichnung übertragen: ${pts.length} Punkte.`);
     info.textContent = 'Übertragen. Bitte bestätigen.';
