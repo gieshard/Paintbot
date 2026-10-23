@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PaintBot Steuerpult</title>
+<meta name="description" content="Steuerung des PaintBot-Zeichenroboters per Web Bluetooth">
+<meta name="theme-color" content="#1d2433">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Steuerpult -- feste Kopfleiste mit Verbindung + STOP, darunter Statusleiste,
+   Arbeitsbereich mit Registern; ab 1000px rechts daneben das Protokoll. */
+:root {
+  --bg: #e9ecf1;          /* Pultgehaeuse, kuehles Grau */
+  --panel: #f7f8fa;
+  --line: #c9cfd9;
+  --fg: #1b2230;
+  --muted: #5d6779;
+  --accent: #2346c7;      /* Tinte des Plotters */
+  --accent-fg: #ffffff;
+  --paper: #ffffff;
+  --grid: #e3e7ee;
+  --travel: #d9822b;      /* Leerfahrt */
+  --ok: #1f8a4c;
+  --warn: #b7791f;
+  --stop: #c62828;
+  --stop-fg: #ffffff;
+  --key: #ffffff;
+  --key-press: #dfe5f2;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Barlow", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 8px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161f; --panel: #1a202c; --line: #2e3749; --fg: #e6e9ef; --muted: #98a2b5;
+    --accent: #7d9bff; --accent-fg: #0d1220; --paper: #f4f5f7; --grid: #e1e5ec;
+    --travel: #e8953f; --ok: #3fbf74; --warn: #e0a440; --stop: #e5484d; --stop-fg: #ffffff;
+    --key: #232a38; --key-press: #2f3a52; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161f; --panel: #1a202c; --line: #2e3749; --fg: #e6e9ef; --muted: #98a2b5;
+  --accent: #7d9bff; --accent-fg: #0d1220; --paper: #f4f5f7; --grid: #e1e5ec;
+  --travel: #e8953f; --ok: #3fbf74; --warn: #e0a440; --stop: #e5484d; --stop-fg: #ffffff;
+  --key: #232a38; --key-press: #2f3a52; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font-body);
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--panel); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* Kopf */
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--panel); border-bottom: 1px solid var(--line); }
+.top-row { display: flex; align-items: center; gap: 12px; padding-block: 10px; flex-wrap: wrap; }
+.brand { font: 700 22px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; margin-right: auto; display: flex; align-items: center; gap: 8px; }
+.brand small { font: 500 12px var(--font-data); letter-spacing: 0; text-transform: none; color: var(--muted); }
+.conn { display: flex; align-items: center; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.on { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.dot.demo { background: var(--warn); }
+.btn { border: 1px solid var(--line); background: var(--key); border-radius: var(--r); padding: 8px 14px; font-weight: 600; }
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; border-color: var(--line); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.small { padding: 5px 10px; font-size: 13px; }
+.btn.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.stop {
+  background: var(--stop); color: var(--stop-fg); border: none; border-radius: var(--r);
+  font: 700 18px/1 var(--font-display); letter-spacing: .08em; padding: 11px 22px; text-transform: uppercase;
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--stop) 60%, #000);
+}
+.stop:active { transform: translateY(1px); box-shadow: none; }
+
+/* Statusleiste */
+.status { display: flex; gap: 6px 18px; flex-wrap: wrap; padding-block: 8px; border-top: 1px solid var(--line); font-size: 13px; align-items: center; }
+.st { display: flex; gap: 6px; align-items: baseline; }
+.st b { font: 500 11px var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.st span { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font: 600 12px var(--font-body); border: 1px solid var(--line); }
+.pill.good { color: var(--ok); border-color: var(--ok); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.bad { color: var(--stop); border-color: var(--stop); }
+.dist { display: flex; gap: 10px; }
+.dist .d { display: flex; flex-direction: column; gap: 2px; min-width: 52px; }
+.dist .d b { font: 500 11px var(--font-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.dist .d span { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.dist .bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.dist .bar i { display: block; height: 100%; width: 0; background: var(--ok); }
+
+/* Hauptbereich */
+main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding-block: 16px; }
+@media (min-width: 1000px) { main { grid-template-columns: minmax(0, 1fr) 360px; } .log-tab { display: none !important; } }
+@media (max-width: 999px) { #logAside { display: none; } }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs button { background: none; border: none; border-bottom: 3px solid transparent; padding: 10px 14px; font: 600 15px var(--font-display); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+section.pane { padding-top: 16px; display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.card h3 { margin: 0; font: 600 16px var(--font-display); letter-spacing: .05em; text-transform: uppercase; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.banner { border: 1px dashed var(--warn); border-radius: var(--r); padding: 10px 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.banner.ok { border-color: var(--ok); border-style: solid; }
+label.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+label.check input { margin-top: 3px; flex: none; }
+label.field { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+input[type=number], input[type=text], select { background: var(--key); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; min-width: 0; }
+input[type=number] { width: 7em; font-family: var(--font-data); }
+
+/* Bluefruit-Tasten */
+.pad { display: grid; grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 64px); gap: 6px; justify-content: center; }
+.key { background: var(--key); border: 1px solid var(--line); border-radius: 10px; font: 700 20px var(--font-display); display: grid; place-items: center; user-select: none; touch-action: none; -webkit-user-select: none; }
+.key.down { background: var(--key-press); border-color: var(--accent); }
+.key.num { width: 64px; height: 64px; }
+.keys { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.keymap { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; margin: 0; }
+.keymap dt { font: 600 13px var(--font-data); color: var(--accent); }
+.keymap dd { margin: 0; }
+.menus { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.menus button { text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--key); font-size: 14px; }
+.menus button span { font-family: var(--font-data); color: var(--muted); margin-right: 6px; }
+.menus button.cur { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+
+/* Zeichnen */
+.drawwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 1300px) { .drawwrap { grid-template-columns: minmax(0, 1fr) 260px; } }
+.canvasbox { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; aspect-ratio: 1.414 / 1; max-width: 100%; touch-action: none; }
+.canvasbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; margin: 0; }
+.stats dt { color: var(--muted); }
+.stats dd { margin: 0; font-family: var(--font-data); font-variant-numeric: tabular-nums; text-align: right; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--accent); vertical-align: middle; margin-right: 5px; }
+.legend i.tr { border-top: 2px dashed var(--travel); }
+progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.warnlist { color: var(--stop); font-size: 13px; margin: 0; padding-left: 18px; }
+
+/* Protokoll */
+.log { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); display: grid; grid-template-rows: auto 1fr auto; min-height: 320px; max-height: calc(100vh - 170px); min-width: 0; }
+aside .log { position: sticky; top: 130px; }
+.log header { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.log header h3 { margin: 0 auto 0 0; font: 600 16px var(--font-display); letter-spacing: .05em; text-transform: uppercase; }
+.loglines { overflow: auto; padding: 8px 12px; font: 12px/1.5 var(--font-data); white-space: pre-wrap; word-break: break-word; min-height: 200px; }
+.loglines .m { color: var(--muted); }
+.loglines .tx { color: var(--accent); }
+.loglines .err { color: var(--stop); }
+.log form { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.log form input { flex: 1; font-family: var(--font-data); }
+
+/* Dialog */
+dialog { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); color: var(--fg); max-width: min(460px, calc(100vw - 32px)); padding: 18px; }
+dialog::backdrop { background: rgba(10, 14, 24, .45); }
+dialog h3 { margin: 0 0 8px; font: 600 18px var(--font-display); text-transform: uppercase; letter-spacing: .04em; }
+dialog ol { padding-left: 20px; margin: 8px 0 14px; }
+.nobt { border: 1px solid var(--stop); border-radius: var(--r); padding: 10px 12px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 560px) {
+  .stop { padding: 10px 16px; }
+  .pad { grid-template-columns: repeat(3, 72px); grid-template-rows: repeat(3, 72px); }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-row">
+    <div class="brand">PaintBot <small id="fwver">nicht verbunden</small></div>
+    <div class="conn">
+      <span class="dot" id="conndot"></span>
+      <button class="btn primary" id="btnConnect">Verbinden</button>
+      <button class="btn" id="btnDemo" title="Ohne Roboter ausprobieren">Demo</button>
+    </div>
+    <button class="stop" id="btnStop" title="Alles anhalten (Leertaste)">Stop</button>
+  </div>
+  <div class="wrap status" id="statusbar">
+    <div class="st"><b>Menü</b><span id="sMenu">–</span></div>
+    <div class="st"><b>Fahren</b><span id="sArm"><span class="pill">–</span></span></div>
+    <div class="st"><b>Zustand</b><span id="sBusy">–</span></div>
+    <div class="st"><b>Stift</b><span id="sPen">–</span></div>
+    <div class="st"><b>Tempo</b><span id="sSpeed">–</span></div>
+    <div class="dist" title="Entfernungsmesser (cm), Balken grün = frei, rot = unter dem Sicherheitsabstand">
+      <div class="d"><b>Vorne</b><span id="dF">–</span><div class="bar"><i id="bF"></i></div></div>
+      <div class="d"><b>Links</b><span id="dL">–</span><div class="bar"><i id="bL"></i></div></div>
+      <div class="d"><b>Rechts</b><span id="dR">–</span><div class="bar"><i id="bR"></i></div></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div style="min-width:0">
+    <div class="nobt" id="noBt" hidden>
+      Dieser Browser kann kein Bluetooth. Funktioniert mit <b>Chrome</b> oder <b>Edge</b> am PC,
+      <b>Chrome</b> auf Android und der App <b>Bluefy</b> auf dem iPhone. Die Seite muss über
+      <b>https</b> geöffnet sein. Zum Ausprobieren ohne Roboter: <b>Demo</b>.
+    </div>
+    <nav class="tabs" role="tablist" id="tabs">
+      <button role="tab" data-tab="steuer" aria-selected="true">Tasten</button>
+      <button role="tab" data-tab="fahren" aria-selected="false">Fahren</button>
+      <button role="tab" data-tab="zeichnen" aria-selected="false">Zeichnen</button>
+      <button role="tab" data-tab="einst" aria-selected="false">Kalibrieren</button>
+      <button role="tab" data-tab="log" aria-selected="false" class="log-tab">Protokoll</button>
+    </nav>
+
+    <!-- TASTEN -->
+    <section class="pane" id="pane-steuer">
+      <div class="grid2">
+        <div class="card">
+          <h3>Bluefruit-Tasten</h3>
+          <p class="hint">Wie in der Bluefruit-App. Am PC auch per Tastatur: Pfeiltasten, 1–4, Leertaste = Stop.</p>
+          <div class="pad" aria-label="Steuerkreuz">
+            <span></span><button class="key" data-key="5" aria-label="Pfeil hoch">▲</button><span></span>
+            <button class="key" data-key="7" aria-label="Pfeil links">◀</button><span></span><button class="key" data-key="8" aria-label="Pfeil rechts">▶</button>
+            <span></span><button class="key" data-key="6" aria-label="Pfeil runter">▼</button><span></span>
+          </div>
+          <div class="keys">
+            <button class="key num" data-key="1">1</button>
+            <button class="key num" data-key="2">2</button>
+            <button class="key num" data-key="3">3</button>
+            <button class="key num" data-key="4">4</button>
+          </div>
+          <p class="hint">Gedrückt halten = langer Druck (ab 0,8 s), genau wie in der Bluefruit-App.</p>
+        </div>
+        <div class="card">
+          <h3 id="kmTitle">Tasten in Menü 0</h3>
+          <dl class="keymap" id="keymap"></dl>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Menü wählen</h3>
+        <div class="menus" id="menus"></div>
+      </div>
+    </section>
+
+    <!-- FAHREN -->
+    <section class="pane" id="pane-fahren" hidden>
+      <div class="banner" id="fahrBanner"></div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Geradeaus</h3>
+          <div class="row">
+            <label class="field">Strecke (cm)<input type="number" id="inDist" value="20" min="0.5" max="300" step="0.5"></label>
+            <button class="btn" id="btnFwd">Vor</button>
+            <button class="btn" id="btnBack">Zurück</button>
+          </div>
+          <div class="row" id="quickDist"></div>
+          <p class="hint">Vorwärts hält der Roboter bei einem Hindernis von selbst an.</p>
+        </div>
+        <div class="card">
+          <h3>Drehen auf der Stelle</h3>
+          <div class="row">
+            <label class="field">Winkel (Grad)<input type="number" id="inTurn" value="90" min="1" max="720" step="1"></label>
+            <button class="btn" id="btnLeft">Links</button>
+            <button class="btn" id="btnRight">Rechts</button>
+          </div>
+          <div class="row" id="quickTurn"></div>
+        </div>
+        <div class="card">
+          <h3>Stift und Tempo</h3>
+          <div class="row">
+            <button class="btn" id="btnPenUp">Stift hoch</button>
+            <button class="btn" id="btnPenDown">Stift runter</button>
+          </div>
+          <div class="row" id="speedBtns"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ZEICHNEN -->
+    <section class="pane" id="pane-zeichnen" hidden>
+      <div class="drawwrap">
+        <div style="display:grid;gap:10px;min-width:0;align-content:start">
+          <div class="tools" id="tools">
+            <button class="btn small on" data-tool="free">Freihand</button>
+            <button class="btn small" data-tool="line">Linienzug</button>
+            <button class="btn small" data-tool="rect">Rechteck</button>
+            <button class="btn small" data-tool="circle">Kreis</button>
+            <button class="btn small" id="btnFinish" hidden>Linienzug fertig</button>
+            <span style="flex:1"></span>
+            <button class="btn small" id="btnUndo">Rückgängig</button>
+            <button class="btn small" id="btnClear">Leeren</button>
+          </div>
+          <div class="canvasbox" id="cbox"><canvas id="cv"></canvas></div>
+          <div class="legend">
+            <span><i></i>Linie (Stift unten)</span>
+            <span><i class="tr"></i>Leerfahrt (Stift oben)</span>
+            <span>● Drehpunkt</span>
+            <span>Roboter startet in der Blattmitte, Blick nach rechts</span>
+          </div>
+        </div>
+        <div style="display:grid;gap:12px;align-content:start;min-width:0">
+          <div class="card">
+            <h3>Blatt</h3>
+            <div class="row">
+              <label class="field">Format<select id="selPaper"></select></label>
+              <label class="field">Raster<select id="selSnap"><option value="0">aus</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label>
+            </div>
+            <label class="check"><input type="checkbox" id="chkOpt" checked><span>Reihenfolge optimieren (kürzere Leerfahrten)</span></label>
+            <div class="row">
+              <label class="field">Vorlage<select id="selTpl">
+                <option value="">– wählen –</option>
+                <option value="square">Quadrat 100 mm</option>
+                <option value="nikolaus">Haus vom Nikolaus</option>
+                <option value="star">Stern</option>
+                <option value="spiral">Spirale</option>
+                <option value="heart">Herz</option>
+              </select></label>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Pfad-Vorschau</h3>
+            <label class="check"><input type="checkbox" id="chkPlan" checked><span>Fahrweg einblenden</span></label>
+            <dl class="stats" id="planStats"></dl>
+            <ul class="warnlist" id="planWarn"></ul>
+            <div class="row">
+              <button class="btn small" id="btnPlay">▶ Abspielen</button>
+              <select id="selPlaySpeed" aria-label="Abspieltempo"><option value="5">5×</option><option value="20" selected>20×</option><option value="60">60×</option></select>
+            </div>
+            <input type="range" id="rngScrub" min="0" max="1000" value="1000" aria-label="Vorschau-Zeitpunkt">
+          </div>
+          <div class="card">
+            <h3>Zeichnen lassen</h3>
+            <button class="btn primary" id="btnSend">An Roboter senden</button>
+            <progress id="sendProg" max="100" value="0" hidden></progress>
+            <p class="hint" id="sendInfo">Die Zeichnung wird übertragen, danach fragt die App noch einmal nach.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- KALIBRIEREN -->
+    <section class="pane" id="pane-einst" hidden>
+      <div class="grid2">
+        <div class="card">
+          <h3>Aktuelle Werte im Roboter</h3>
+          <dl class="stats" id="cfgList"></dl>
+          <p class="hint">Änderungen hier gelten bis zum Neustart. Dauerhaft in <code>global.h</code> eintragen:</p>
+          <pre id="cfgLines" style="margin:0;font:12px var(--font-data);background:var(--key);border:1px solid var(--line);border-radius:6px;padding:8px;overflow-x:auto"></pre>
+          <button class="btn small" id="btnCopyCfg">Zeilen kopieren</button>
+        </div>
+        <div class="card">
+          <h3>Drehung korrigieren</h3>
+          <p class="hint">Fahren-Register: 90° (oder 360°) drehen lassen und den echten Winkel messen.</p>
+          <div class="row">
+            <label class="field">befohlen (°)<input type="number" id="calTurnCmd" value="90"></label>
+            <label class="field">gefahren (°)<input type="number" id="calTurnAct" value="100"></label>
+          </div>
+          <p class="hint" id="calTurnOut"></p>
+          <button class="btn" id="btnCalTurn">Spurweite übernehmen</button>
+        </div>
+        <div class="card">
+          <h3>Strecke korrigieren</h3>
+          <p class="hint">Zuerst prüfen: 100 cm vor fahren lassen und mit dem Maßband messen.</p>
+          <div class="row">
+            <label class="field">befohlen (cm)<input type="number" id="calDistCmd" value="100"></label>
+            <label class="field">gefahren (cm)<input type="number" id="calDistAct" value="100"></label>
+          </div>
+          <p class="hint" id="calDistOut"></p>
+          <button class="btn" id="btnCalDist">Raddurchmesser übernehmen</button>
+        </div>
+        <div class="card">
+          <h3>Darstellung</h3>
+          <div class="row">
+            <button class="btn small" data-theme-set="">System</button>
+            <button class="btn small" data-theme-set="light">Hell</button>
+            <button class="btn small" data-theme-set="dark">Dunkel</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane log-tab" id="pane-log" hidden></section>
+  </div>
+
+  <aside id="logAside" style="min-width:0">
+    <div class="log" id="logBox">
+      <header>
+        <h3>Protokoll</h3>
+        <label style="font-size:12px;display:flex;gap:4px;align-items:center"><input type="checkbox" id="chkRaw"> Maschinenzeilen</label>
+        <button class="btn small" id="btnLogClear">Leeren</button>
+      </header>
+      <div class="loglines" id="loglines" aria-live="polite"></div>
+      <form id="cmdForm" autocomplete="off">
+        <input type="text" id="cmdIn" placeholder="Befehl, z. B. FWD 10" aria-label="Textbefehl senden">
+        <button class="btn small" type="submit">Senden</button>
+      </form>
+    </div>
+  </aside>
+</main>
+
+<dialog id="dlgRun">
+  <h3>Zeichnung starten?</h3>
+  <ol>
+    <li>Blatt <b id="dlgPaper">A3</b> quer hinlegen.</li>
+    <li>Roboter mit dem Stift genau über die Blattmitte stellen.</li>
+    <li>Blick nach rechts, parallel zur langen Kante.</li>
+  </ol>
+  <p class="hint" id="dlgInfo"></p>
+  <div class="row" style="justify-content:flex-end">
+    <button class="btn" id="dlgCancel">Abbrechen</button>
+    <button class="btn primary" id="dlgGo">Freigeben und zeichnen</button>
+  </div>
+</dialog>
+
+<dialog id="dlgArm">
+  <h3>Fahren freigeben?</h3>
+  <p>Der Roboter führt danach Fahrbefehle aus dieser App aus. Wieder sperren mit „Sperren“, Taste 2 oder <b>Stop</b>. Ein Menüwechsel oder Verbindungsabbruch sperrt automatisch.</p>
+  <div class="row" style="justify-content:flex-end">
+    <button class="btn" id="dlgArmNo">Abbrechen</button>
+    <button class="btn primary" id="dlgArmYes">Freigeben</button>
+  </div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
