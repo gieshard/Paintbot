@@ -138,7 +138,7 @@ class DemoLink {
   busy() { return !!(this.s.move || this.s.run); }
   stat() {
     const s = this.s;
-    this.say(`@STAT m=${s.menu} a=${s.armed ? 1 : 0} b=${this.busy() ? 1 : 0} f=${s.menu === 8 ? Math.round(s.f) : -1} l=-1 r=-1 pen=${s.pen} sp=${s.sp} sw=${s.menu === 8 ? 1 : 0} run=${s.run ? 1 : 0} pts=${s.path.length} thr=15`);
+    this.say(`@STAT m=${s.menu} a=${s.armed ? 1 : 0} b=${this.busy() ? 1 : 0} f=${s.menu === 8 ? Math.round(s.f) : -1} l=-1 r=-1 pen=${s.pen} sp=${s.sp} sw=${s.menu === 8 ? 1 : 0} run=${s.run ? 1 : 0} pts=${s.path.length} thr=15 bm=11850 bp=71 fm=3950 fp=70`);
   }
   cfgLine() {
     const c = this.s.cfg;
@@ -270,6 +270,7 @@ function handleLine(line) {
       const o = parseKV(rest);
       st.menu = +o.m; st.armed = o.a === '1'; st.busy = o.b === '1'; st.f = +o.f; st.l = +o.l; st.r = +o.r;
       st.pen = +o.pen; st.sp = +o.sp; st.sw = +o.sw; st.run = +o.run; st.pts = +o.pts; st.thr = +o.thr || 15;
+      st.bm = o.bm !== undefined ? +o.bm : null; st.bp = +o.bp; st.fm = o.fm !== undefined ? +o.fm : null; st.fp = +o.fp;
       renderStatus(); break;
     }
     case '@CFG': {
@@ -335,6 +336,16 @@ function renderStatus() {
   $('sBusy').innerHTML = !c ? '–' : st.run ? pill('zeichnet', 'good') : st.busy ? pill('fährt', 'good') : pill('steht');
   $('sPen').textContent = c ? (st.pen ? 'unten' : 'oben') : '–';
   $('sSpeed').textContent = c ? SPEED_NAMES[st.sp] || '–' : '–';
+  // Akkus (Firmware ab V14): Volt + Prozent, Farbe nach Restladung
+  const batt = (mv, pct, cells) => {
+    if (!c || mv == null) return '–';
+    if (mv < 0) return pill(cells > 1 ? 'nicht gemessen' : '–');
+    const v = (mv / 1000).toLocaleString('de-DE', { minimumFractionDigits: cells > 1 ? 1 : 2, maximumFractionDigits: cells > 1 ? 1 : 2 });
+    const cls = pct <= 10 ? 'bad' : pct <= 25 ? 'warn' : 'good';
+    return pill(`${pct} %`, cls) + ` <small>${v} V</small>`;
+  };
+  $('sBattM').innerHTML = batt(st.bm, st.bp, 3);
+  $('sBattF').innerHTML = batt(st.fm, st.fp, 1);
   for (const [k, v] of [['F', st.f], ['L', st.l], ['R', st.r]]) {
     const ok = c && v >= 0;
     $('d' + k).textContent = ok ? v + ' cm' : '–';
