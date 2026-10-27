@@ -17,26 +17,35 @@ const NUS_TX      = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';  // Roboter -> App
 const BLE_CHUNK   = 20;
 const POINTS_PER_LINE = 7;
 
-const MENUS = [
-  'Leerlauf', 'Bluetooth-Steuerung', 'Muster', 'Zufallsfahrt', 'Driftkorrektur',
-  'Distanz-Monitor', 'Hardwaretests', 'Generative Kunst', 'App-Steuerung'
-];
+/* Menues der Firmware (V16). Menue 5 (Distanz-Monitor) gibt es nicht mehr --
+   dieselbe Messung steckt im Hardwaretest. Nummern bleiben gleich wie am Roboter. */
+const MENUS = {
+  0: 'Leerlauf', 1: 'Fernsteuerung', 2: 'Muster', 3: 'Zufallsfahrt', 4: 'Driftkorrektur',
+  6: 'Hardwaretest', 7: 'Kunst', 8: 'App-Fahren'
+};
+const MENU_ORDER = [0, 1, 2, 3, 4, 6, 7, 8];
 const KEYMAPS = {
   0: [['T1', 'Stepper-Test anfordern, T2 bestätigt'], ['T1 lang', 'Servo-Test'], ['T2 lang', 'Entfernungsmesser an/aus']],
   1: [['T2', 'Steuerkreuz freigeben / sperren'], ['Pfeile', 'einmal = fahren, nochmal = stopp'], ['T3', 'Tempo Langsam / Mittel / Schnell']],
   2: [['T3', 'nächstes Muster'], ['T2', 'Muster starten / abbrechen'], ['T2 lang', 'Entfernungsmesser an/aus']],
   3: [['T2', 'Zufallsfahrt starten / stoppen']],
   4: [['T2', 'Driftfahrt 100 cm starten / abbrechen'], ['T3', 'Korrektur an/aus'], ['T1', 'Drehkalibrierung anfordern, T2 bestätigt']],
-  5: [['T2', 'Stepper-Benchmark (Räder drehen)'], ['T3', 'Front-Fokus ↔ Schwenken']],
   6: [['T1', 'Fahrtest anfordern, T2 bestätigt'], ['T2', 'Servo-Test'], ['T3', 'Distanzsensor-Test']],
-  7: [['T1', 'neuer Zufalls-Seed'], ['T3', 'nächster Algorithmus'], ['Hoch/Runter', 'Papierformat'], ['Links/Rechts', 'Seed −/+'], ['T2', 'zeichnen / abbrechen']],
-  8: [['T2', 'Fahren freigeben / sperren'], ['App', 'Register „Fahren“ und „Zeichnen“']],
+  7: [['T1', 'Seed aus dem Entfernungssensor'], ['T3', 'nächster Algorithmus'], ['Hoch/Runter', 'Papierformat'], ['Links/Rechts', 'Seed −/+'], ['T2', 'zeichnen / abbrechen']],
+  8: [['T2', 'Fahren freigeben / sperren'], ['App', 'Fahrbefehle und Zeichnen hier in der App']],
 };
+/* Muster aus Patterns.ino (cm). Der Roboter faehrt die erste Strecke in seine
+   Blickrichtung und dreht dann jeweils auf die naechste. */
+const PATTERNS = [
+  { name: 'Dreieck', fw: 'Triangle', pts: [[5, 5], [5, 0], [0, 0]] },
+  { name: 'Rechteck', fw: 'Rectangle', pts: [[0, 4], [8, 4], [8, 0], [0, 0]] },
+  { name: 'Ziege', fw: 'Goat 1', pts: [[2, 3], [0, 7], [3, 5], [8, 5], [10, 7], [7, 10], [15, 6], [13, 3], [13, 5], [11, 5], [10, 4], [10, 0], [8, 2], [4, 2], [0, 0]] },
+];
 const PAPERS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594] };
 const SPEED_NAMES = ['Langsam', 'Mittel', 'Schnell'];
 const DEFAULT_CFG = {
-  wheel: 53.0, track: 141.4, spr: 500, spt: 1334, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
-  prof: [{ v: 150, a: 400 }, { v: 280, a: 600 }, { v: 420, a: 850 }],
+  wheel: 63.0, track: 142.5, spr: 500, spt: 1131, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
+  prof: [{ v: 150, a: 250 }, { v: 280, a: 350 }, { v: 420, a: 450 }],
   art: [0, 2], penms: 300, ret: 1, keep: 1
 };
 const MIN_SEG_MM = 1.0;
@@ -48,6 +57,9 @@ const st = {
   cfg: { ...DEFAULT_CFG, prof: DEFAULT_CFG.prof.map(p => ({ ...p })), art: [...DEFAULT_CFG.art] },
   live: null,      // { i, n, x, y, h } waehrend einer Zeichnung
   sending: false,
+  view: 'm0',      // sichtbares Menue in der App (m0..m8, einst, log)
+  pat: 0,          // gewaehltes Muster (Menue 2)
+  art: { algo: 0, seed: 1, paper: 0 },   // Auswahl Menue 7
 };
 const $ = id => document.getElementById(id);
 const waiters = [];
@@ -96,7 +108,7 @@ class BleLink {
 class DemoLink {
   constructor(onLine, onState) {
     this.onLine = onLine; this.onState = onState; this.txt = ''; this.pkt = [];
-    this.s = { menu: 0, armed: false, tel: false, pen: 0, sp: 1, path: [], run: null, move: null, cfg: JSON.parse(JSON.stringify(DEFAULT_CFG)), f: 120 };
+    this.s = { menu: 0, armed: false, tel: false, pen: 0, sp: 1, path: [], run: null, move: null, cfg: JSON.parse(JSON.stringify(DEFAULT_CFG)), f: 120, pat: 0, art: [0, 1, 0] };
   }
   async connect() {
     this.timer = setInterval(() => this.tick(), 50);
@@ -119,16 +131,30 @@ class DemoLink {
   }
   key(p) {
     const n = p[2] - 48, down = p[3] === 49, s = this.s;
-    if (!down) { if (n === 2 && s.menu === 8) this.arm(!s.armed); return; }
-    if (n === 4) { this.setMenu((s.menu + 1) % 9); return; }
+    if (!down) {
+      if (n !== 2) return;
+      if (s.menu === 8) this.arm(!s.armed);
+      else if (s.menu === 2 && s.run) { this.stopAll(); }
+      else if (s.menu === 2) this.say('Starting pattern: ' + PATTERNS[s.pat].fw + ' (Demo: es wird nichts gefahren)');
+      else if (s.menu === 7) this.say('Demo: Zeichnen von ' + ArtGen.NAMES[s.art[0]] + ' wäre jetzt gestartet.');
+      else this.say('Demo: Taste 2 in Menü ' + s.menu);
+      return;
+    }
+    if (n === 4) { let m = (s.menu + 1) % 9; if (m === 5) m = 6; this.setMenu(m); return; }
     if (n === 3 && s.menu === 1) { s.sp = (s.sp + 1) % 3; this.say('Geschwindigkeit: ' + SPEED_NAMES[s.sp]); return; }
+    if (n === 3 && s.menu === 2) { s.pat = (s.pat + 1) % PATTERNS.length; this.say('Selected pattern: ' + PATTERNS[s.pat].fw); this.say('@PAT ' + s.pat); return; }
+    if (n === 3 && s.menu === 7) { s.art[0] = (s.art[0] + 1) % ArtGen.NAMES.length; this.artLine(); return; }
+    if (n === 1 && s.menu === 7) { s.art[1] = 1 + Math.floor(Math.random() * 999999); this.say('Seed ' + s.art[1] + ' aus 8 Echos (Demo)'); this.artLine(); return; }
+    if (n >= 5 && s.menu === 7) { const a = s.art; if (n === 5) a[2] = (a[2] + 1) % 3; if (n === 6) a[2] = (a[2] + 2) % 3; if (n === 7) a[1] = Math.max(1, a[1] - 1); if (n === 8) a[1]++; this.artLine(); return; }
     if (n !== 2) this.say('Demo: Taste ' + n + ' in Menü ' + s.menu);
   }
   setMenu(m) {
     const s = this.s; this.stopAll(); s.menu = m; s.armed = false;
     this.say('== ' + MENUS[m] + ' (Menue ' + m + ') ==');
     if (m === 8) this.say('Fahren GESPERRT -- in der App freigeben oder Taste 2 kurz.');
+    if (m === 7) this.artLine();
   }
+  artLine() { const a = this.s.art; this.say(`Bild: ${ArtGen.NAMES[a[0]]} | Seed ${a[1]} | ${ArtGen.PAPERS[a[2]].name}`); this.say(`@ART ${a[0]} ${a[1]} ${a[2]}`); }
   arm(on) { this.s.armed = on; if (!on) this.stopAll(); this.say(on ? 'App: Fahren FREIGEGEBEN' : 'App: Fahren GESPERRT'); this.stat(); }
   stopAll() {
     const s = this.s;
@@ -166,12 +192,19 @@ class DemoLink {
       s.path.push(...pts); this.say('@PATH ' + s.path.length); return;
     }
     switch (w) {
-      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO'); this.cfgLine(); this.stat(); break;
+      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16)'); this.cfgLine(); this.stat(); break;
       case 'TELEM': s.tel = arg !== '0'; this.say('@OK TELEM'); break;
       case 'STAT': this.stat(); break;
       case 'CFG': this.cfgLine(); break;
-      case 'STOP': this.stopAll(); this.say('@OK STOP'); if (s.menu !== 8) this.setMenu(0); break;
-      case 'MENU': { const m = parseInt(arg, 10); if (!(m >= 0 && m <= 8)) { this.say('@ERR arg MENU 0..n'); break; } if (m !== s.menu) this.setMenu(m); this.say('@OK MENU'); break; }
+      case 'STOP': { const wasImg = s.menu === 2 && !!s.run; this.stopAll(); this.say('@OK STOP'); if (s.menu !== 8 && !wasImg) this.setMenu(0); break; }
+      case 'MENU': { const m = parseInt(arg, 10); if (!(m >= 0 && m <= 8) || m === 5) { this.say('@ERR arg MENU 0..4, 6..8'); break; } this.say('@OK MENU'); if (m !== s.menu) this.setMenu(m); break; }
+      case 'PATTERN': { const n = parseInt(arg, 10); if (!(n >= 0 && n < PATTERNS.length)) { this.say('@ERR arg PATTERN 0..n'); break; } if (s.menu !== 2) { this.say('@ERR menu Muster nur in Menue 2'); break; } s.pat = n; this.say('Selected pattern: ' + PATTERNS[n].fw); this.say('@PAT ' + n); this.say('@OK PATTERN'); break; }
+      case 'ART': {
+        const [a, sd, p] = arg.split(/\s+/).map(Number);
+        if (s.menu !== 7) { this.say('@ERR menu ART nur in Menue 7'); break; }
+        if (!(a >= 0 && a < ArtGen.NAMES.length && sd >= 1 && sd <= 999999 && p >= 0 && p < 3)) { this.say('@ERR arg Algorithmus, Seed oder Papier ungueltig'); break; }
+        s.art = [a, sd, p]; this.artLine(); this.say('@OK ART'); break;
+      }
       case 'ARM': case 'DISARM': if (s.menu !== 8) { this.say('@ERR menu Freigabe nur in Menue 8'); break; } this.arm(w === 'ARM'); this.say('@OK ' + w); break;
       case 'FWD': case 'BACK': case 'TURN': {
         const val = parseFloat(arg);
@@ -193,7 +226,8 @@ class DemoLink {
       case 'PCLR': s.path = []; this.say('@PATH 0'); break;
       case 'PRUN': {
         if (s.path.length < 2) { this.say('@ERR empty keine Zeichnung'); break; }
-        if (!this.canDrive()) break;
+        if (s.menu === 2) { if (this.busy()) { this.say('@ERR busy Roboter faehrt noch'); break; } }
+        else if (!this.canDrive()) break;
         const plan = planRobot(s.path, c);
         s.run = { plan, t: 0, nextProg: 0 };
         this.say('App-Zeichnung startet.'); this.say('@RUN ' + s.path.length); break;
@@ -270,6 +304,7 @@ function handleLine(line) {
       const o = parseKV(rest);
       st.menu = +o.m; st.armed = o.a === '1'; st.busy = o.b === '1'; st.f = +o.f; st.l = +o.l; st.r = +o.r;
       st.pen = +o.pen; st.sp = +o.sp; st.sw = +o.sw; st.run = +o.run; st.pts = +o.pts; st.thr = +o.thr || 15;
+      followRobotMenu();
       st.bm = o.bm !== undefined ? +o.bm : null; st.bp = +o.bp; st.fm = o.fm !== undefined ? +o.fm : null; st.fp = +o.fp;
       renderStatus(); break;
     }
@@ -279,13 +314,19 @@ function handleLine(line) {
       if (o.mode) c.mode = o.mode;
       if (o.prof) c.prof = o.prof.split(',').map(t => { const [v, a] = t.split('/'); return { v: +v, a: +a }; });
       if (o.art) c.art = o.art.split(',').map(Number);
-      renderCfg(); recomputePlan(); break;
+      renderCfg(); syncArtCfg(); recomputePlan(); break;
     }
     case '@PROG': {
       const [i, n, x, y, h] = rest.split(/\s+/).map(Number);
-      st.live = { i, n, x, y, h }; renderLive(); break;
+      st.live = Object.assign(st.live || { target: 'draw' }, { i, n, x, y, h }); renderLive(); break;
     }
     case '@END': if (st.live) { st.live.done = rest; renderLive(); } st.busy = false; renderStatus(); break;
+    case '@PAT': { const n = parseInt(rest, 10); if (n >= 0 && n < PATTERNS.length) { st.pat = n; renderPatterns(); } break; }
+    case '@ART': {
+      const [a, sd, p] = rest.split(/\s+/).map(Number);
+      if (a >= 0 && a < ArtGen.NAMES.length && sd >= 1) { st.art = { algo: a, seed: sd, paper: p >= 0 && p < 3 ? p : 0 }; st.artFromRobot = true; renderArt(true); }
+      break;
+    }
     case '@DONE': st.busy = false; renderStatus(); break;
     case '@OK': if (/^(FWD|BACK|TURN)/.test(rest)) { st.busy = true; renderStatus(); } break;
     case '@EVT': if (/^obst/.test(rest)) logLine('Hindernis -- Fahrt angehalten.', 'err'); break;
@@ -294,7 +335,7 @@ function handleLine(line) {
 
 /* ------------------------------------------------------------------ Verbindung */
 function onState(connected, name) {
-  st.connected = connected;
+  st.connected = connected; st.prevRobotMenu = undefined;
   if (!connected) { st.menu = null; st.armed = false; st.busy = false; st.live = null; $('fwver').textContent = 'nicht verbunden'; logLine('Verbindung getrennt.', 'err'); }
   else { logLine('Verbunden mit ' + name + '.'); if (st.demo) $('noBt').hidden = true; setTimeout(() => sendText('HELLO'), 150); }
   $('conndot').className = 'dot' + (connected ? (st.demo ? ' demo' : ' on') : '');
@@ -332,6 +373,7 @@ function pill(text, kind) { return `<span class="pill ${kind || ''}">${text}</sp
 function renderStatus() {
   const c = st.connected, m = st.menu;
   $('sMenu').textContent = c && m != null ? m + ' · ' + (MENUS[m] || '?') : '–';
+  $('m1Speed').textContent = c ? SPEED_NAMES[st.sp] || '–' : '–';
   $('sArm').innerHTML = !c || m == null ? pill('–') : m === 8 ? (st.armed ? pill('frei', 'good') : pill('gesperrt', 'warn')) : pill('nur Menü 8');
   $('sBusy').innerHTML = !c ? '–' : st.run ? pill('zeichnet', 'good') : st.busy ? pill('fährt', 'good') : pill('steht');
   $('sPen').textContent = c ? (st.pen ? 'unten' : 'oben') : '–';
@@ -353,11 +395,8 @@ function renderStatus() {
     bar.style.width = ok ? Math.min(100, v) + '%' : '0';
     bar.style.background = ok && v < st.thr ? 'var(--stop)' : ok && v < st.thr * 2 ? 'var(--warn)' : 'var(--ok)';
   }
-  // Tastenbelegung + Menueliste
-  const km = KEYMAPS[m] || KEYMAPS[0];
-  $('kmTitle').textContent = m == null ? 'Tastenbelegung' : 'Tasten in Menü ' + m + ' · ' + MENUS[m];
-  $('keymap').innerHTML = km.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('') + '<dt>T4</dt><dd>nächstes Menü</dd>';
-  document.querySelectorAll('#menus button').forEach(b => b.classList.toggle('cur', +b.dataset.m === m));
+  renderMenubar();
+  renderRobotInfo();
   renderFahren();
 }
 function driveReady() { return st.connected && st.menu === 8 && st.armed && !st.busy && !st.run; }
@@ -365,7 +404,7 @@ function renderFahren() {
   const b = $('fahrBanner');
   let html, ok = false;
   if (!st.connected) html = 'Nicht verbunden. Oben auf <b>Verbinden</b> tippen (oder <b>Demo</b> zum Ausprobieren).';
-  else if (st.menu !== 8) html = `Fahrbefehle der App gehen nur im Menü 8 (App-Steuerung). <button class="btn small" data-act="menu8">Menü 8 öffnen</button>`;
+  else if (st.menu !== 8) html = `Der Roboter ist noch nicht in diesem Menü. <button class="btn small" data-act="menu8">Roboter auf Menü 8 schalten</button>`;
   else if (!st.armed) html = `Fahren ist gesperrt. <button class="btn small primary" data-act="arm">Fahren freigeben</button>`;
   else { ok = true; html = `Fahren freigegeben. <button class="btn small" data-act="disarm">Sperren</button>`; }
   b.innerHTML = html; b.classList.toggle('ok', ok);
@@ -475,10 +514,11 @@ function paperSize() { return PAPERS[draw.paper] || PAPERS.A3; }
 function rdp(pts, eps) {   // Ramer-Douglas-Peucker
   if (pts.length < 3) return pts.slice();
   let idx = 0, dmax = 0;
-  const [ax, ay] = pts[0], [bx, by] = pts[pts.length - 1], L = Math.hypot(bx - ax, by - ay) || 1e-9;
+  const [ax, ay] = pts[0], [bx, by] = pts[pts.length - 1], L = Math.hypot(bx - ax, by - ay);
   for (let i = 1; i < pts.length - 1; i++) {
     const [px, py] = pts[i];
-    const d = Math.abs((by - ay) * px - (bx - ax) * py + bx * ay - by * ax) / L;
+    // geschlossener Linienzug (Anfang = Ende): Abstand zum Anfangspunkt statt zur Geraden
+    const d = L < 1e-9 ? Math.hypot(px - ax, py - ay) : Math.abs((by - ay) * px - (bx - ax) * py + bx * ay - by * ax) / L;
     if (d > dmax) { dmax = d; idx = i; }
   }
   if (dmax <= eps) return [pts[0], pts[pts.length - 1]];
@@ -591,7 +631,8 @@ function render() {
   ctx.fillText(`${draw.paper} · ${W} × ${H} mm`, x0 + 6, y0 + 14);
 
   const plan = draw.plan, showPlan = $('chkPlan').checked && plan;
-  const tNow = st.live && plan ? liveTime() : (draw.playT != null && plan ? draw.playT : null);
+  const liveHere = st.live && st.live.target !== 'img';
+  const tNow = liveHere && plan ? liveTime() : (draw.playT != null && plan ? draw.playT : null);
   const ink = css('--accent'), travel = css('--travel');
 
   if (!showPlan || tNow == null) {
@@ -634,21 +675,22 @@ function render() {
     ctx.strokeStyle = ink; ctx.lineWidth = 1.6; pathLine(draw.cur.concat(draw.hover ? [draw.hover] : [])); ctx.stroke();
   }
   // Roboter
-  if (st.live && st.live.done !== 'ok' && st.live.done !== 'abort') drawRobot(st.live.x, st.live.y, st.live.h, css('--ok'));
+  if (st.live && st.live.target !== 'img' && st.live.done !== 'ok' && st.live.done !== 'abort') drawRobot(st.live.x, st.live.y, st.live.h, css('--ok'));
   else if (showPlan && tNow != null) { const p = poseAt(plan, tNow); drawRobot(p.x, p.y, p.h, css('--fg')); }
   else drawRobot(0, 0, 0, '#7b8494');
 }
 function liveTime() {
-  const l = st.live, p = draw.plan;
+  const l = st.live, p = l.plan || draw.plan;
   if (l.done === 'ok') return p.total;
   const q = p.progAt[Math.max(0, Math.min(p.progAt.length - 1, l.i - 1))];
   return q ? q.t : 0;
 }
 function renderLive() {
   const l = st.live; if (!l) return;
-  const pr = $('sendProg'); pr.hidden = false; pr.max = l.n; pr.value = l.done === 'ok' ? l.n : Math.max(0, l.i - 1);
-  $('sendInfo').textContent = l.done === 'ok' ? 'Fertig gezeichnet.' : l.done === 'abort' ? 'Abgebrochen.' : `Zeichnet: Punkt ${l.i} von ${l.n}`;
-  render();
+  const pr = l.prog || $('sendProg'), info = l.info || $('sendInfo');
+  pr.hidden = false; pr.max = l.n; pr.value = l.done === 'ok' ? l.n : Math.max(0, l.i - 1);
+  info.textContent = l.done === 'ok' ? 'Fertig gezeichnet.' : l.done === 'abort' ? 'Abgebrochen.' : `Zeichnet: Punkt ${l.i} von ${l.n}`;
+  if (l.target === 'img') renderImg(); else render();
 }
 
 /* Zeichenwerkzeuge */
@@ -744,15 +786,22 @@ async function sendPathLine(line, prev, want, tries = 4) {
 }
 
 /* Zeichnung senden */
-async function sendDrawing() {
+/* Eine Punktliste uebertragen und zeichnen lassen.
+   opts: { menu: 8|2, paper, plan, prog, info, target: 'draw'|'img', onState }
+   Menue 8: wie bisher mit Fahrfreigabe (ARM). Menue 2 (Bild): ohne ARM -- die
+   Rueckfrage hier in der App ist die Bestaetigung (Firmware ab V16). */
+async function sendPath(pts, opts) {
   if (!st.connected) { logLine('Erst verbinden.', 'err'); return; }
-  const pts = draw.points; if (pts.length < 2) return;
-  st.sending = true; renderPlanStats();
-  const pr = $('sendProg'), info = $('sendInfo');
+  if (pts.length < 2) return;
+  const menu = opts.menu || 8, pr = opts.prog, info = opts.info;
+  st.sending = true; opts.onState && opts.onState();
   pr.hidden = false; pr.max = pts.length; pr.value = 0; st.live = null;
   try {
-    if (st.menu !== 8) { info.textContent = 'Wechsle in Menü 8 …'; sendText('MENU 8'); await expect(/^@OK MENU/); await new Promise(r => setTimeout(r, 300)); }
-    info.textContent = 'Übertrage Zeichnung …';
+    if (st.menu !== menu) {
+      info.textContent = `Schalte den Roboter auf Menü ${menu} …`;
+      sendText('MENU ' + menu); await expect(/^@OK MENU/); await new Promise(r => setTimeout(r, 300));
+    }
+    info.textContent = 'Übertrage …';
     logLine('> PCLR', 'tx');
     await sendPathLine('PCLR', 0, 0);
     for (let i = 0; i < pts.length; i += POINTS_PER_LINE) {
@@ -761,22 +810,26 @@ async function sendDrawing() {
       await sendPathLine(line, i, i + chunk.length);   // nicht ins Protokoll, sonst wird es unlesbar
       pr.value = i + chunk.length;
     }
-    logLine(`Zeichnung übertragen: ${pts.length} Punkte.`);
+    logLine(`Übertragen: ${pts.length} Punkte.`);
     info.textContent = 'Übertragen. Bitte bestätigen.';
-    const ok = await confirmRun();
-    if (!ok) { info.textContent = 'Übertragen, nicht gestartet. „An Roboter senden“ startet neu.'; return; }
-    if (!st.armed) { sendText('ARM'); await expect(/^@OK ARM/); }
+    const ok = await confirmRun(opts.paper, pts.length, opts.plan.total);
+    if (!ok) { info.textContent = 'Übertragen, nicht gestartet.'; return; }
+    if (menu === 8 && !st.armed) { sendText('ARM'); await expect(/^@OK ARM/); }
     sendText('PRUN'); await expect(/^@RUN \d+/);
-    st.live = { i: 0, n: pts.length, x: 0, y: 0, h: 0 }; renderLive();
+    st.live = { i: 0, n: pts.length, x: 0, y: 0, h: 0, target: opts.target, plan: opts.plan, prog: pr, info };
+    renderLive();
   } catch (e) {
-    info.textContent = 'Fehler: ' + e.message; logLine('Zeichnung: ' + e.message, 'err');
-  } finally { st.sending = false; renderPlanStats(); }
+    info.textContent = 'Fehler: ' + e.message; logLine('Übertragung: ' + e.message, 'err');
+  } finally { st.sending = false; opts.onState && opts.onState(); }
 }
-function confirmRun() {
+function sendDrawing() {
+  return sendPath(draw.points, { menu: 8, paper: draw.paper, plan: draw.plan, prog: $('sendProg'), info: $('sendInfo'), target: 'draw', onState: renderPlanStats });
+}
+function confirmRun(paper, n, total) {
   return new Promise(res => {
     const d = $('dlgRun');
-    $('dlgPaper').textContent = draw.paper;
-    $('dlgInfo').textContent = `${draw.points.length} Punkte, Dauer ca. ${fmtTime(draw.plan.total)}. Abbrechen jederzeit mit Stop.`;
+    $('dlgPaper').textContent = paper;
+    $('dlgInfo').textContent = `${n} Punkte, Dauer ca. ${fmtTime(total)}. Abbrechen jederzeit mit Stop.`;
     const done = v => { d.close(); $('dlgGo').onclick = $('dlgCancel').onclick = null; res(v); };
     $('dlgGo').onclick = () => done(true); $('dlgCancel').onclick = () => done(false);
     d.showModal();
@@ -789,18 +842,477 @@ function confirmArm() {
   d.showModal();
 }
 
-/* ------------------------------------------------------------------ Aufbau */
-function setTab(name) {
-  if (name === 'log' && matchMedia('(min-width: 1000px)').matches) name = 'steuer';
-  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === name));
-  document.querySelectorAll('section.pane').forEach(p => p.hidden = p.id !== 'pane-' + name);
-  const aside = $('logAside'), logPane = $('pane-log'), box = $('logBox');
-  if (name === 'log') { logPane.appendChild(box); } else if (box.parentElement !== aside) aside.appendChild(box);
-  aside.hidden = name === 'log';
-  store('tab', name);
-  if (name === 'zeichnen') requestAnimationFrame(resizeCanvas);
+/* ------------------------------------------------------------------ Menüleiste und Ansichten (neu 27.10.2026) */
+const VIEWS_EXTRA = [['einst', 'Einstellungen', 'App'], ['log', 'Protokoll', 'App']];
+function viewMenu(v) { return /^m\d$/.test(v) ? +v.slice(1) : null; }
+
+function renderMenubar() {
+  const bar = $('menubar'); if (!bar) return;
+  if (!bar.dataset.built) {
+    bar.innerHTML = MENU_ORDER.map(m => `<button data-view="m${m}" role="tab"><small>Menü ${m}</small><b>${MENUS[m]}</b></button>`).join('') +
+      '<span class="sep"></span>' +
+      VIEWS_EXTRA.map(([v, t, k]) => `<button data-view="${v}" role="tab" class="${v === 'log' ? 'log-tab' : ''}"><small>${k}</small><b>${t}</b></button>`).join('');
+    bar.dataset.built = '1';
+    bar.onclick = ev => { const b = ev.target.closest('button'); if (b) selectView(b.dataset.view, true); };
+  }
+  bar.querySelectorAll('button').forEach(b => {
+    b.setAttribute('aria-selected', b.dataset.view === st.view);
+    b.classList.toggle('robot', st.connected && b.dataset.view === 'm' + st.menu);
+    b.title = st.connected && b.dataset.view === 'm' + st.menu ? 'Der Roboter ist in diesem Menü' : '';
+  });
+  renderMenuBanner();
 }
-function setTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; store('theme', t); render(); }
+
+/* Ansicht wechseln. fromUser = Klick in der Menüleiste: dann auch den Roboter umschalten. */
+function selectView(v, fromUser) {
+  if (v === 'log' && matchMedia('(min-width: 1000px)').matches) return;
+  st.view = v; store('view', v);
+  document.querySelectorAll('section.pane').forEach(p => p.hidden = p.id !== 'pane-' + v);
+  const aside = $('logAside'), logPane = $('pane-log'), box = $('logBox');
+  if (v === 'log') logPane.appendChild(box); else if (box.parentElement !== aside) aside.appendChild(box);
+  aside.hidden = v === 'log';
+  // Bluefruit-Tasten in das Menü holen, das einen Platz dafür hat
+  const home = $('padHome-' + v), pad = $('padCard');
+  if (home) { home.appendChild(pad); pad.hidden = false; } else pad.hidden = true;
+  const m = viewMenu(v);
+  $('keymap').innerHTML = (KEYMAPS[m] || KEYMAPS[0]).map(([k, t]) => `<dt>${k}</dt><dd>${t}</dd>`).join('') + '<dt>T4</dt><dd>nächstes Menü</dd>';
+  if (fromUser && m != null && st.connected && st.menu !== m) {
+    st.pendingMenu = { m, until: Date.now() + 2500 };
+    sendText('MENU ' + m);
+  }
+  if (v === 'm8') requestAnimationFrame(resizeCanvas);
+  if (v === 'm2') requestAnimationFrame(() => { renderPatterns(); renderImg(); });
+  if (v === 'm7') requestAnimationFrame(() => renderArt(false));
+  renderMenubar();
+}
+
+/* Der Roboter hat das Menü gewechselt (Taste 4 am Roboter, Stop, Akku ...): mitgehen. */
+function followRobotMenu() {
+  if (st.pendingMenu) {
+    if (st.menu === st.pendingMenu.m || Date.now() > st.pendingMenu.until) st.pendingMenu = null;
+    else return;
+  }
+  if (st.menu === st.prevRobotMenu) return;
+  st.prevRobotMenu = st.menu;
+  if (viewMenu(st.view) != null && MENUS[st.menu] && st.view !== 'm' + st.menu) selectView('m' + st.menu, false);
+}
+
+function renderMenuBanner() {
+  const b = $('menuBanner'), m = viewMenu(st.view);
+  if (!st.connected || m == null || m === 8 || st.menu === m || st.menu == null) { b.hidden = true; return; }
+  b.hidden = false;
+  b.innerHTML = `Der Roboter ist gerade in Menü ${st.menu} (${MENUS[st.menu] || '?'}). <button class="btn small primary" data-act="goto">Roboter auf Menü ${m} schalten</button>`;
+}
+
+function renderRobotInfo() {
+  const el = $('robotInfo'); if (!el) return;
+  const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
+  el.innerHTML = [
+    ['Verbindung', st.connected ? (st.demo ? 'Demo' : 'verbunden') : 'nicht verbunden'],
+    ['Firmware', st.fw || '–'],
+    ['Räder / Spurweite', `${c.wheel.toFixed(1)} / ${c.track.toFixed(1)} mm`],
+    ['Tempo jetzt', (SPEED_NAMES[st.sp] || '–') + (st.cfg.prof[st.sp] ? ` (${(st.cfg.prof[st.sp].v * mm / 10).toFixed(1)} cm/s)` : '')],
+    ['Hauptakku', st.bm > 0 ? `${(st.bm / 1000).toFixed(1)} V (${st.bp} %)` : st.connected ? 'nicht gemessen' : '–'],
+    ['Feather-Akku', st.fm > 0 ? `${(st.fm / 1000).toFixed(2)} V (${st.fp} %)` : '–'],
+  ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+
+/* Tasten aus den Menü-Ansichten: kurz antippen, lang halten, oder anfordern + bestätigen */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function ensureMenu(m) {
+  if (!st.connected) { logLine('Erst verbinden.', 'err'); return false; }
+  if (st.menu === m) return true;
+  st.pendingMenu = { m, until: Date.now() + 2500 };
+  sendText('MENU ' + m);
+  try { await expect(/^@OK MENU/); await sleep(250); return true; } catch (e) { logLine('Menüwechsel: ' + e.message, 'err'); return false; }
+}
+async function tapKey(n) { sendKey(n, true); await sleep(90); sendKey(n, false); }
+async function holdKey(n) { sendKey(n, true); await sleep(1000); sendKey(n, false); }
+function confirmDialog(title, text, yes) {
+  return new Promise(res => {
+    const d = $('dlgConfirm');
+    $('dlgCTitle').textContent = title; $('dlgCText').textContent = text; $('dlgCYes').textContent = yes || 'Bestätigen';
+    const done = v => { d.close(); $('dlgCYes').onclick = $('dlgCNo').onclick = null; res(v); };
+    $('dlgCYes').onclick = () => done(true); $('dlgCNo').onclick = () => done(false);
+    d.showModal();
+  });
+}
+const CONFIRM_TEXT = {
+  4: ['Drehkalibrierung starten?', 'Der Roboter fährt 30 cm vor und zurück und dreht sechsmal 360°. Mindestens 45 cm Platz, dauert ca. 1 Minute.'],
+  6: ['Fahrtest starten?', 'Der Roboter fährt 20 cm vor, 20 cm zurück und dreht je 90° rechts und links. Roboter vorher freistellen.'],
+};
+async function menuAction(btn) {
+  const m = viewMenu(st.view); if (m == null) return;
+  if (!(await ensureMenu(m))) return;
+  if (btn.dataset.tap) await tapKey(+btn.dataset.tap);
+  else if (btn.dataset.hold) await holdKey(+btn.dataset.hold);
+  else if (btn.dataset.confirm) {
+    await tapKey(+btn.dataset.confirm);          // anfordern ...
+    const [t, x] = CONFIRM_TEXT[m] || ['Fahrt bestätigen?', 'Der Roboter fährt gleich los.'];
+    if (await confirmDialog(t, x, 'Losfahren')) await tapKey(2);   // ... und mit Taste 2 bestätigen
+    else logLine('Nicht bestätigt – die Anforderung verfällt nach 10 s von selbst, der Roboter fährt nicht.');
+  }
+}
+
+/* ------------------------------------------------------------------ Menü 2: Muster */
+function patternPath(i) {   // mm, Start (0,0), erste Strecke nach rechts
+  const p = PATTERNS[i].pts.map(([x, y]) => [x * 10, y * 10]);
+  const a = -Math.atan2(p[0][1], p[0][0]), c = Math.cos(a), s = Math.sin(a);
+  return [[0, 0]].concat(p.map(([x, y]) => [x * c - y * s, x * s + y * c]));
+}
+function drawPathOn(cvs, pts, opts = {}) {
+  const r = cvs.getBoundingClientRect(); if (!r.width) return;
+  const dpr = window.devicePixelRatio || 1, g = cvs.getContext('2d');
+  cvs.width = Math.round(r.width * dpr); cvs.height = Math.round(r.height * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
+  g.fillStyle = css('--paper'); g.fillRect(0, 0, r.width, r.height);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const pad = opts.pad || 14, sc = Math.min((r.width - 2 * pad) / Math.max(1, x1 - x0), (r.height - 2 * pad) / Math.max(1, y1 - y0));
+  const ox = r.width / 2 - (x0 + x1) / 2 * sc, oy = r.height / 2 + (y0 + y1) / 2 * sc;
+  const P = (x, y) => [ox + x * sc, oy - y * sc];
+  if (opts.grid) {   // 1-cm-Raster
+    g.strokeStyle = css('--grid'); g.lineWidth = 1; g.beginPath();
+    for (let gx = Math.ceil(x0 / 10) * 10 - 20; gx <= x1 + 20; gx += 10) { const [a] = P(gx, 0); g.moveTo(a, 0); g.lineTo(a, r.height); }
+    for (let gy = Math.ceil(y0 / 10) * 10 - 20; gy <= y1 + 20; gy += 10) { const [, b] = P(0, gy); g.moveTo(0, b); g.lineTo(r.width, b); }
+    g.stroke();
+  }
+  g.strokeStyle = css('--accent'); g.lineWidth = opts.lw || 2; g.lineJoin = 'round'; g.lineCap = 'round';
+  g.beginPath(); pts.forEach(([x, y], k) => { const [a, b] = P(x, y); k ? g.lineTo(a, b) : g.moveTo(a, b); }); g.stroke();
+  if (opts.robot) {   // Startposition und Blickrichtung
+    const [a, b] = P(0, 0); g.fillStyle = css('--ok'); g.strokeStyle = css('--ok'); g.lineWidth = 2;
+    g.beginPath(); g.arc(a, b, 4, 0, 7); g.fill();
+    g.beginPath(); g.moveTo(a, b); g.lineTo(a + 22, b); g.lineTo(a + 16, b - 4); g.moveTo(a + 22, b); g.lineTo(a + 16, b + 4); g.stroke();
+  }
+}
+function renderPatterns() {
+  const box = $('patThumbs'); if (!box) return;
+  if (!box.dataset.built) {
+    box.innerHTML = PATTERNS.map((p, i) => `<button class="thumb" data-pat="${i}"><canvas></canvas><span>${p.name}</span><small>${p.pts.length} Strecken</small></button>`).join('');
+    box.dataset.built = '1';
+    box.onclick = async ev => {
+      const b = ev.target.closest('[data-pat]'); if (!b) return;
+      st.pat = +b.dataset.pat; renderPatterns();
+      if (st.connected && await ensureMenu(2)) sendText('PATTERN ' + st.pat);
+    };
+  }
+  box.querySelectorAll('[data-pat]').forEach(b => {
+    b.setAttribute('aria-pressed', +b.dataset.pat === st.pat);
+    drawPathOn(b.querySelector('canvas'), patternPath(+b.dataset.pat), { pad: 8, lw: 1.5 });
+  });
+  const pts = patternPath(st.pat);
+  drawPathOn($('patCv'), pts, { grid: true, robot: true });
+  let L = 0; for (let k = 1; k < pts.length; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+  const xs = PATTERNS[st.pat].pts.map(p => p[0]), ys = PATTERNS[st.pat].pts.map(p => p[1]);
+  $('patTitle').textContent = PATTERNS[st.pat].name;
+  $('patStats').innerHTML = [['Strecken', PATTERNS[st.pat].pts.length], ['Linie gesamt', (L / 10).toFixed(1) + ' cm'],
+    ['Größe ca.', `${Math.max(...xs, 0) - Math.min(...xs, 0)} × ${Math.max(...ys, 0) - Math.min(...ys, 0)} cm`], ['Im Roboter', PATTERNS[st.pat].fw]]
+    .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+
+/* ------------------------------------------------------------------ Menü 7: Kunst */
+function syncArtCfg() {
+  const c = st.cfg, C = ArtGen.CFG;
+  C.wheelMm = c.wheel; C.trackMm = c.track; C.stepsPerRev = c.spr; C.penMoveSec = c.penms / 1000; C.returnHome = !!c.ret;
+  C.profiles = c.prof.map((p, i) => ({ name: SPEED_NAMES[i], acc: p.a, max: p.v }));
+  C.lineProfile = c.art[0] || 0; C.turnProfile = c.art[1] != null ? c.art[1] : 2;
+  if (st.view === 'm7') renderArt(false);
+}
+function drawArtOn(cvs, plan, opts = {}) {
+  const r = cvs.getBoundingClientRect(); if (!r.width) return;
+  const dpr = window.devicePixelRatio || 1, g = cvs.getContext('2d');
+  cvs.width = Math.round(r.width * dpr); cvs.height = Math.round(r.height * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
+  const pw = plan.paper.w, ph = plan.paper.h, pad = opts.pad || 10;
+  const sc = Math.min((r.width - 2 * pad) / pw, (r.height - 2 * pad) / ph);
+  const ox = r.width / 2, oy = r.height / 2, P = (x, y) => [ox + x * sc, oy - y * sc];
+  g.fillStyle = css('--paper'); g.fillRect(ox - pw / 2 * sc, oy - ph / 2 * sc, pw * sc, ph * sc);
+  if (opts.travel) {
+    g.strokeStyle = css('--travel'); g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath();
+    for (const [x0, y0, x1, y1, pen] of plan.route) if (!pen) { const [a, b] = P(x0, y0), [c, d] = P(x1, y1); g.moveTo(a, b); g.lineTo(c, d); }
+    g.stroke(); g.setLineDash([]);
+  }
+  g.strokeStyle = css('--accent'); g.lineWidth = opts.lw || 1; g.lineJoin = 'round'; g.lineCap = 'round'; g.beginPath();
+  let open = false;
+  for (const [x0, y0, x1, y1, pen] of plan.route) {
+    if (!pen) { open = false; continue; }
+    const [a, b] = P(x0, y0), [c, d] = P(x1, y1);
+    if (!open) { g.moveTo(a, b); open = true; } g.lineTo(c, d);
+  }
+  g.stroke();
+}
+let artTimer = null;
+function renderArt(fromRobot) {
+  const box = $('artThumbs'); if (!box) return;
+  const a = st.art;
+  if (!box.dataset.built) {
+    box.innerHTML = ArtGen.NAMES.map((n, i) => `<button class="thumb" data-algo="${i}"><canvas></canvas><span>${n}</span></button>`).join('');
+    box.dataset.built = '1';
+    box.onclick = ev => { const b = ev.target.closest('[data-algo]'); if (b) { st.art.algo = +b.dataset.algo; artChanged(); } };
+    $('artPaper').innerHTML = ArtGen.PAPERS.map((p, i) => `<button data-paper="${i}">${p.name}</button>`).join('');
+    $('artPaper').onclick = ev => { const b = ev.target.closest('[data-paper]'); if (b) { st.art.paper = +b.dataset.paper; artChanged(); } };
+  }
+  if (st.view !== 'm7') return;
+  box.querySelectorAll('[data-algo]').forEach(b => {
+    const i = +b.dataset.algo; b.setAttribute('aria-pressed', i === a.algo);
+    drawArtOn(b.querySelector('canvas'), ArtGen.plan(i, a.seed, a.paper), { pad: 4, lw: 0.6 });
+  });
+  $('artPaper').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.paper === a.paper));
+  $('artSeed').value = a.seed;
+  const plan = ArtGen.plan(a.algo, a.seed, a.paper);
+  drawArtOn($('artCv'), plan, { travel: true, lw: 1.2, pad: 14 });
+  $('artTitle').textContent = ArtGen.NAMES[a.algo];
+  const fm = mm => (mm / 1000).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' m';
+  $('artStats').innerHTML = [['Dauer ca.', fmtTime(plan.sec)], ['Linie', fm(plan.drawMm)], ['Leerfahrt', fm(plan.travelMm)], ['Absetzen', plan.lifts + '×'], ['Punkte', plan.pointCount]]
+    .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  $('artSync').textContent = !st.connected ? 'Nicht verbunden – nur Vorschau.' :
+    fromRobot ? 'Stimmt mit dem Roboter überein.' : st.menu === 7 ? 'Wird an den Roboter übertragen …' : 'Beim Zeichnen schaltet die App den Roboter auf Menü 7.';
+}
+function artChanged() {
+  st.art.seed = Math.max(1, Math.min(999999, Math.floor(st.art.seed) || 1));
+  store('art', st.art); renderArt(false);
+  clearTimeout(artTimer);
+  if (!st.connected) return;
+  artTimer = setTimeout(async () => { if (await ensureMenu(7)) sendText(`ART ${st.art.algo} ${st.art.seed} ${st.art.paper}`); }, 350);
+}
+
+/* ------------------------------------------------------------------ Menü 2: Bild -> Linien (neu 27.10.2026)
+   Vorgehen:
+     1. Bild auf höchstens IMG_MAX Pixel verkleinern, in Graustufen umrechnen, leicht
+        weichzeichnen, Kontrast strecken (1.–99. Perzentil).
+     2. Linien gewinnen – drei Verfahren:
+        - Umriss:     Marching Squares auf der Helligkeit bei EINER Schwelle (Startwert
+                      nach Otsu) -> geschlossene Konturen der dunklen Flächen.
+        - Höhenlinien: dasselbe bei 2–5 Schwellen -> wirkt wie eine Landkarte.
+        - Schraffur:  parallele Linien nur dort, wo es dunkel ist; je dunkler, desto
+                      mehr Lagen (45°, −45°, 0°, 90°). Wenige, lange Striche.
+     3. In mm umrechnen (aufs Blatt einpassen), vereinfachen (Ramer-Douglas-Peucker),
+        kurze Schnipsel weglassen, Reihenfolge optimieren (nächster Nachbar).
+     4. Wie jede App-Zeichnung übertragen; gezeichnet wird in Menü 2. */
+const IMG_MAX = 360, IMG_MARGIN = 15;
+const imgSt = { src: null, gray: null, w: 0, h: 0, name: '', strokes: [], points: [], plan: null, scale: 1, thrSet: false };
+
+function imgParam() {
+  return {
+    mode: $('imgMode').value, thr: +$('imgThr').value / 100, levels: +$('imgLevels').value,
+    spacing: +$('imgSpacing').value, eps: +$('imgDetail').value / 10, minLen: +$('imgMin').value,
+    invert: $('imgInvert').checked, paper: $('imgPaper').value, size: +$('imgSize').value / 100,
+  };
+}
+function imgLabels() {
+  const p = imgParam();
+  $('imgThrV').textContent = Math.round(p.thr * 100) + ' %';
+  $('imgLevelsV').textContent = p.levels;
+  $('imgSpacingV').textContent = p.spacing + ' mm';
+  $('imgDetailV').textContent = p.eps.toFixed(1) + ' mm';
+  $('imgMinV').textContent = p.minLen + ' mm';
+  $('imgSizeV').textContent = Math.round(p.size * 100) + ' %';
+  $('imgLevelsF').hidden = p.mode === 'outline';
+  $('imgSpacingF').hidden = p.mode !== 'hatch';
+}
+
+function loadImageFile(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file), im = new Image();
+  im.onload = () => {
+    const k = Math.min(1, IMG_MAX / Math.max(im.width, im.height));
+    const w = Math.max(2, Math.round(im.width * k)), h = Math.max(2, Math.round(im.height * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(im, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data, raw = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) raw[i] = (0.299 * d[4 * i] + 0.587 * d[4 * i + 1] + 0.114 * d[4 * i + 2]) / 255;
+    const gray = new Float32Array(w * h);           // 3x3-Weichzeichner gegen Pixelrauschen
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let s = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue; s += raw[yy * w + xx]; n++;
+      }
+      gray[y * w + x] = s / n;
+    }
+    const sorted = Float32Array.from(gray).sort(), lo = sorted[Math.floor(sorted.length * 0.01)], hi = sorted[Math.floor(sorted.length * 0.99)];
+    for (let i = 0; i < gray.length; i++) gray[i] = Math.max(0, Math.min(1, (gray[i] - lo) / Math.max(1e-3, hi - lo)));
+    Object.assign(imgSt, { src: c, gray, w, h, name: file.name });
+    $('imgThr').value = Math.round(otsu(gray) * 100);    // Startwert für die Schwelle
+    $('imgName').textContent = `${file.name} · ${im.width} × ${im.height} px`;
+    URL.revokeObjectURL(url);
+    convertImage();
+  };
+  im.onerror = () => { $('imgName').textContent = 'Das Bild ließ sich nicht öffnen. Bitte JPG oder PNG wählen.'; URL.revokeObjectURL(url); };
+  im.src = url;
+}
+
+function otsu(gray) {
+  const hist = new Array(256).fill(0);
+  for (const v of gray) hist[Math.min(255, Math.floor(v * 255))]++;
+  const N = gray.length; let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sB = 0, wB = 0, best = 0, bestT = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]; if (!wB) continue; const wF = N - wB; if (!wF) break;
+    sB += t * hist[t]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) ** 2;
+    if (v > best) { best = v; bestT = t; }
+  }
+  return Math.max(0.05, Math.min(0.95, (bestT + 0.5) / 255));
+}
+
+/* Marching Squares: Konturen von f = Helligkeit - t (dunkel = innen). Liefert Linienzüge in Pixeln. */
+function contours(gray, w, h, t, invert) {
+  const f = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 1 : (invert ? t - gray[y * w + x] : gray[y * w + x] - t);
+  const W = w + 3, H = h + 3;
+  const key = (type, x, y) => (type * W + (x + 1)) * H + (y + 1);
+  const pos = new Map(), adj = new Map(), segs = [];
+  const edgePt = (type, x, y) => {
+    const k = key(type, x, y);
+    if (!pos.has(k)) {
+      let p;
+      if (type === 0) { const a = f(x, y), b = f(x + 1, y), u = a / (a - b); p = [x + u, y]; }      // waagrechte Kante
+      else { const a = f(x, y), b = f(x, y + 1), u = a / (a - b); p = [x, y + u]; }                 // senkrechte Kante
+      pos.set(k, p);
+    }
+    return k;
+  };
+  const T = (x, y) => edgePt(0, x, y), B = (x, y) => edgePt(0, x, y + 1), L = (x, y) => edgePt(1, x, y), R = (x, y) => edgePt(1, x + 1, y);
+  const add = (a, b) => { const i = segs.length; segs.push([a, b]); for (const k of [a, b]) { if (!adj.has(k)) adj.set(k, []); adj.get(k).push(i); } };
+  for (let y = -1; y < h; y++) for (let x = -1; x < w; x++) {
+    const c = (f(x, y) < 0 ? 8 : 0) | (f(x + 1, y) < 0 ? 4 : 0) | (f(x + 1, y + 1) < 0 ? 2 : 0) | (f(x, y + 1) < 0 ? 1 : 0);
+    switch (c) {
+      case 1: case 14: add(L(x, y), B(x, y)); break;
+      case 2: case 13: add(B(x, y), R(x, y)); break;
+      case 3: case 12: add(L(x, y), R(x, y)); break;
+      case 4: case 11: add(T(x, y), R(x, y)); break;
+      case 6: case 9: add(T(x, y), B(x, y)); break;
+      case 7: case 8: add(L(x, y), T(x, y)); break;
+      case 5: add(L(x, y), T(x, y)); add(B(x, y), R(x, y)); break;
+      case 10: add(T(x, y), R(x, y)); add(L(x, y), B(x, y)); break;
+    }
+  }
+  const used = new Uint8Array(segs.length), out = [];
+  const nextFrom = (k) => { for (const i of adj.get(k) || []) if (!used[i]) return i; return -1; };
+  for (let s0 = 0; s0 < segs.length; s0++) {
+    if (used[s0]) continue;
+    used[s0] = 1; const chain = [segs[s0][0], segs[s0][1]];
+    for (let end = 0; end < 2; end++) {               // erst vorwärts, dann rückwärts verlängern
+      for (;;) {
+        const k = end === 0 ? chain[chain.length - 1] : chain[0];
+        const i = nextFrom(k); if (i < 0) break;
+        used[i] = 1; const o = segs[i][0] === k ? segs[i][1] : segs[i][0];
+        if (end === 0) chain.push(o); else chain.unshift(o);
+      }
+    }
+    out.push(chain.map(k => pos.get(k)));
+  }
+  return out;
+}
+
+/* Schraffur: Lagen paralleler Linien, je dunkler desto mehr Lagen. Abstand in Pixeln. */
+function hatch(gray, w, h, thr, levels, spacingPx, invert) {
+  const angles = [45, -45, 0, 90], out = [];
+  const val = (x, y) => { const v = gray[Math.min(h - 1, Math.max(0, Math.round(y))) * w + Math.min(w - 1, Math.max(0, Math.round(x)))]; return invert ? 1 - v : v; };
+  for (let k = 0; k < levels; k++) {
+    const lim = thr * (levels - k) / levels, a = angles[k % 4] * Math.PI / 180;
+    const dx = Math.cos(a), dy = Math.sin(a), nx = -dy, ny = dx;
+    const cs = [[0, 0], [w, 0], [0, h], [w, h]];
+    const ns = cs.map(([x, y]) => x * nx + y * ny), ds = cs.map(([x, y]) => x * dx + y * dy);
+    const n0 = Math.min(...ns), n1 = Math.max(...ns), d0 = Math.min(...ds), d1 = Math.max(...ds);
+    let flip = false;
+    for (let o = n0 + spacingPx / 2; o < n1; o += spacingPx) {
+      const runs = []; let cur = null;
+      for (let t = d0; t <= d1; t += 0.5) {
+        const x = o * nx + t * dx, y = o * ny + t * dy;
+        const inside = x >= 0 && y >= 0 && x <= w - 1 && y <= h - 1 && val(x, y) < lim;
+        if (inside) { if (!cur) cur = [[x, y], [x, y]]; else cur[1] = [x, y]; }
+        else if (cur) { runs.push(cur); cur = null; }
+      }
+      if (cur) runs.push(cur);
+      if (flip) { runs.reverse(); runs.forEach(r => r.reverse()); }
+      flip = !flip;
+      out.push(...runs);
+    }
+  }
+  return out;
+}
+
+function orderStrokes(strokes) {   // nächster Nachbar ab der Blattmitte, Strich ggf. umgedreht
+  strokes = strokes.map(s => s.slice()); const out = []; let cx = 0, cy = 0;
+  while (strokes.length) {
+    let best = 0, bestD = Infinity, rev = false;
+    strokes.forEach((s, i) => {
+      const d0 = Math.hypot(s[0][0] - cx, s[0][1] - cy), d1 = Math.hypot(s[s.length - 1][0] - cx, s[s.length - 1][1] - cy);
+      if (d0 < bestD) { bestD = d0; best = i; rev = false; }
+      if (d1 < bestD) { bestD = d1; best = i; rev = true; }
+    });
+    const s = strokes.splice(best, 1)[0]; if (rev) s.reverse();
+    out.push(s); [cx, cy] = s[s.length - 1];
+  }
+  return out;
+}
+
+function convertImage() {
+  imgLabels();
+  if (!imgSt.gray) { imgSt.strokes = []; imgSt.points = []; imgSt.plan = null; renderImgStats(); renderImg(); return; }
+  const p = imgParam(), [PW, PH] = PAPERS[p.paper] || PAPERS.A3, { w, h, gray } = imgSt;
+  const s = Math.min((PW - 2 * IMG_MARGIN) * p.size / w, (PH - 2 * IMG_MARGIN) * p.size / h);   // mm pro Pixel
+  imgSt.scale = s;
+  let raw;
+  if (p.mode === 'hatch') raw = hatch(gray, w, h, p.thr, p.levels, Math.max(1, p.spacing / s), p.invert);
+  else if (p.mode === 'iso') { raw = []; for (let k = 1; k <= p.levels; k++) raw.push(...contours(gray, w, h, k / (p.levels + 1), p.invert)); }
+  else raw = contours(gray, w, h, p.thr, p.invert);
+  const toMm = ([x, y]) => [Math.round((x - w / 2) * s * 10) / 10, Math.round(-(y - h / 2) * s * 10) / 10];
+  let strokes = raw.map(st0 => rdp(st0.map(toMm), p.eps)).filter(q => q.length >= 2 && pathLen(q) >= Math.max(1, p.minLen));
+  strokes = orderStrokes(strokes);
+  imgSt.strokes = strokes;
+  const pts = [];
+  for (const q of strokes) q.forEach((pt, i) => pts.push({ x: pt[0], y: pt[1], pen: i ? 1 : 0 }));
+  imgSt.points = pts;
+  imgSt.plan = pts.length >= 2 ? planRobot(pts, st.cfg) : null;
+  renderImgStats(); renderImg();
+}
+
+function renderImgStats() {
+  const p = imgSt.plan, warn = [];
+  if (!imgSt.gray) { $('imgStats').innerHTML = '<dt>Noch kein Bild gewählt</dt><dd></dd>'; $('imgWarn').innerHTML = ''; $('imgSend').disabled = true; return; }
+  if (!p) { $('imgStats').innerHTML = '<dt>Keine Linien gefunden</dt><dd></dd>'; $('imgWarn').innerHTML = '<li>Schwelle verschieben oder „Hell und dunkel tauschen“.</li>'; $('imgSend').disabled = true; return; }
+  const s = p.stats;
+  $('imgStats').innerHTML = [['Linienzüge', imgSt.strokes.length], ['Punkte', imgSt.points.length], ['Linie', (s.draw / 1000).toFixed(1) + ' m'],
+    ['Leerfahrt', (s.travel / 1000).toFixed(1) + ' m'], ['Stift aufsetzen', s.lowerings + '×'], ['Dauer ca.', fmtTime(p.total)]]
+    .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  if (imgSt.points.length > st.cfg.pmax) warn.push(`Zu viele Punkte (${imgSt.points.length}, höchstens ${st.cfg.pmax}): „Vereinfachen“ oder „Kürzeste Linie“ erhöhen, oder weniger Stufen.`);
+  if (s.lowerings > 300) warn.push('Sehr viele Einzelstriche – das dauert lange. „Kürzeste Linie“ erhöhen hilft.');
+  $('imgWarn').innerHTML = warn.map(x => `<li>${x}</li>`).join('');
+  $('imgSend').disabled = imgSt.points.length > st.cfg.pmax || st.sending;
+}
+
+function renderImg() {
+  const cvs = $('imgCv'); if (!cvs) return;
+  const r = cvs.getBoundingClientRect(); if (!r.width) return;
+  const dpr = window.devicePixelRatio || 1, g = cvs.getContext('2d');
+  cvs.width = Math.round(r.width * dpr); cvs.height = Math.round(r.height * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, r.width, r.height);
+  const p = imgParam(), [PW, PH] = PAPERS[p.paper] || PAPERS.A3, pad = 12;
+  const sc = Math.min((r.width - 2 * pad) / PW, (r.height - 2 * pad) / PH), ox = r.width / 2, oy = r.height / 2;
+  const P = (x, y) => [ox + x * sc, oy - y * sc];
+  g.fillStyle = css('--paper'); g.fillRect(ox - PW / 2 * sc, oy - PH / 2 * sc, PW * sc, PH * sc);
+  g.fillStyle = '#7b8494'; g.font = '11px ' + css('--font-data'); g.fillText(`${p.paper} · ${PW} × ${PH} mm`, ox - PW / 2 * sc + 6, oy - PH / 2 * sc + 14);
+  if (!imgSt.gray) {
+    g.fillStyle = '#7b8494'; g.font = '14px ' + css('--font-body'); g.textAlign = 'center';
+    g.fillText('Noch kein Bild – oben „Bild wählen …“', ox, oy); g.textAlign = 'start'; return;
+  }
+  if ($('imgShowSrc').checked) {
+    const s = imgSt.scale * sc; g.globalAlpha = 0.22;
+    g.drawImage(imgSt.src, ox - imgSt.w / 2 * s, oy - imgSt.h / 2 * s, imgSt.w * s, imgSt.h * s); g.globalAlpha = 1;
+  }
+  g.strokeStyle = css('--accent'); g.lineWidth = 1.2; g.lineJoin = 'round'; g.lineCap = 'round';
+  const live = st.live && st.live.target === 'img' ? st.live : null;
+  for (const q of imgSt.strokes) { g.beginPath(); q.forEach(([x, y], i) => { const [a, b] = P(x, y); i ? g.lineTo(a, b) : g.moveTo(a, b); }); g.stroke(); }
+  const [rx, ry] = live ? P(live.x, live.y) : P(0, 0);
+  g.strokeStyle = css('--ok'); g.lineWidth = 2; g.beginPath(); g.arc(rx, ry, 6, 0, 7); g.stroke();
+}
+
+function sendImage() {
+  return sendPath(imgSt.points, { menu: 2, paper: $('imgPaper').value, plan: imgSt.plan, prog: $('imgProg'), info: $('imgInfo'), target: 'img', onState: renderImgStats });
+}
+
+/* ------------------------------------------------------------------ Aufbau */
+function setTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; store('theme', t); render(); renderImg(); renderPatterns(); renderArt(false); }
 
 function init() {
   if (!navigator.bluetooth) $('noBt').hidden = false;
@@ -808,7 +1320,6 @@ function init() {
   $('btnConnect').onclick = () => { if (!navigator.bluetooth && !st.connected) { $('noBt').hidden = false; return; } connect(false); };
   $('btnDemo').onclick = () => connect(true);
   $('btnStop').onclick = () => { sendText('STOP'); draw.playing = false; };
-  document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 
   // Tasten
   document.querySelectorAll('.key').forEach(k => {
@@ -825,15 +1336,43 @@ function init() {
     if (ev.key === ' ' || ev.key === 'Escape') { ev.preventDefault(); if (draw.tool === 'line' && draw.cur && ev.key === 'Escape') { draw.cur = null; $('btnFinish').hidden = true; render(); return; } sendText('STOP'); return; }
     if (ev.key === 'Enter' && draw.cur) { finishLine(); return; }
     const n = keyFor[ev.key]; if (!n || ev.repeat || ev.ctrlKey || ev.metaKey) return;
-    if ($('pane-steuer').hidden) return;
+    if ($('padCard').hidden) return;
     ev.preventDefault(); const el = document.querySelector(`.key[data-key="${n}"]`); el && el.classList.add('down'); sendKey(n, true);
   });
   window.addEventListener('keyup', ev => {
-    const n = keyFor[ev.key]; if (!n || typing() || $('pane-steuer').hidden) return;
+    const n = keyFor[ev.key]; if (!n || typing() || $('padCard').hidden) return;
     const el = document.querySelector(`.key[data-key="${n}"]`); if (el && el.classList.contains('down')) { el.classList.remove('down'); sendKey(n, false); }
   });
-  $('menus').innerHTML = MENUS.map((m, i) => `<button data-m="${i}"><span>${i}</span>${m}</button>`).join('');
-  $('menus').onclick = ev => { const b = ev.target.closest('button'); if (b) sendText('MENU ' + b.dataset.m); };
+  // Menü-Ansichten: Tasten-Knöpfe (data-tap / data-hold / data-confirm)
+  document.querySelectorAll('section.pane [data-tap], section.pane [data-hold], section.pane [data-confirm]').forEach(b => b.addEventListener('click', () => menuAction(b)));
+  $('menuBanner').onclick = ev => { if (ev.target.dataset.act === 'goto') { const m = viewMenu(st.view); if (m != null) ensureMenu(m); } };
+  for (const id of ['m2tabs', 'm8tabs']) {
+    $(id).onclick = ev => {
+      const b = ev.target.closest('[data-sub]'); if (!b) return;
+      const pre = id.slice(0, 2);
+      $(id).querySelectorAll('[data-sub]').forEach(x => x.setAttribute('aria-selected', x === b));
+      $(id).querySelectorAll('[data-sub]').forEach(x => $(pre + '-' + x.dataset.sub).hidden = x !== b);
+      store(id, b.dataset.sub);
+      requestAnimationFrame(() => { resizeCanvas(); renderImg(); renderPatterns(); });
+    };
+    const saved = load(id, null); if (saved) { const b = $(id).querySelector(`[data-sub="${saved}"]`); if (b) b.click(); }
+  }
+  // Menü 2: Bild
+  $('imgPaper').innerHTML = Object.keys(PAPERS).map(k => `<option ${k === 'A3' ? 'selected' : ''}>${k}</option>`).join('');
+  $('imgFile').onchange = ev => loadImageFile(ev.target.files[0]);
+  ['imgMode', 'imgThr', 'imgLevels', 'imgSpacing', 'imgDetail', 'imgMin', 'imgInvert', 'imgPaper', 'imgSize'].forEach(id => $(id).addEventListener('input', () => { imgLabels(); clearTimeout(imgSt.t); imgSt.t = setTimeout(convertImage, 120); }));
+  $('imgShowSrc').onchange = renderImg;
+  $('imgSend').onclick = sendImage;
+  new ResizeObserver(() => renderImg()).observe($('imgBox'));
+  new ResizeObserver(() => renderPatterns()).observe($('patBox'));
+  imgLabels(); renderImgStats();
+  // Menü 7: Kunst
+  st.art = Object.assign(st.art, load('art', {}));
+  $('artSeed').onchange = () => { st.art.seed = +$('artSeed').value; artChanged(); };
+  $('artSeedDown').onclick = () => { st.art.seed = Math.max(1, st.art.seed - 1); artChanged(); };
+  $('artSeedUp').onclick = () => { st.art.seed += 1; artChanged(); };
+  $('artRand').onclick = () => { st.art.seed = 1 + Math.floor(Math.random() * 999999); artChanged(); };
+  new ResizeObserver(() => { if (st.view === 'm7') renderArt(false); }).observe($('artBox'));
 
   // Fahren
   $('fahrBanner').onclick = ev => {
@@ -892,7 +1431,8 @@ function init() {
   $('cmdForm').onsubmit = ev => { ev.preventDefault(); const t = $('cmdIn').value.trim(); if (t) { sendText(t); $('cmdIn').value = ''; } };
 
   renderCfg(); renderStatus(); recomputePlan();
-  setTab(load('tab', 'steuer'));
+  renderArt(false); syncArtCfg();
+  selectView(load('view', 'm0'), false);
   logLine('Bereit. „Verbinden“ wählt den Roboter aus der Bluetooth-Liste.');
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }

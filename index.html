@@ -111,7 +111,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding-
 .tabs button { background: none; border: none; border-bottom: 3px solid transparent; padding: 10px 14px; font: 600 15px var(--font-display); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
 .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
 section.pane { padding-top: 16px; display: grid; gap: 16px; min-width: 0; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 12px; min-width: 0; align-content: start; }
 .card h3 { margin: 0; font: 600 16px var(--font-display); letter-spacing: .05em; text-transform: uppercase; }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -171,6 +171,40 @@ dialog::backdrop { background: rgba(10, 14, 24, .45); }
 dialog h3 { margin: 0 0 8px; font: 600 18px var(--font-display); text-transform: uppercase; letter-spacing: .04em; }
 dialog ol { padding-left: 20px; margin: 8px 0 14px; }
 .nobt { border: 1px solid var(--stop); border-radius: var(--r); padding: 10px 12px; font-size: 14px; }
+
+/* Menüleiste (neu 27.10.2026) */
+.menubar { background: var(--bg); display: flex; gap: 6px; overflow-x: auto; padding-block: 10px; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+.menubar button { flex: none; display: grid; gap: 1px; text-align: left; padding: 7px 12px 6px; border: 1px solid var(--line); border-radius: var(--r); background: var(--key); min-width: 92px; position: relative; }
+.menubar button b { font: 600 15px/1.1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; }
+.menubar button small { font: 500 11px var(--font-data); color: var(--muted); }
+.menubar button[aria-selected="true"] { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+.menubar button.robot::after { content: ""; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.menubar .sep { flex: none; width: 1px; background: var(--line); margin: 4px 2px; }
+.pane-head { display: grid; gap: 2px; }
+.pane-head h2 { margin: 0; font: 700 24px/1.1 var(--font-display); text-transform: uppercase; letter-spacing: .03em; text-wrap: balance; }
+.subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.subtabs button { background: none; border: none; border-bottom: 3px solid transparent; padding: 8px 12px; font: 600 14px var(--font-display); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.subtabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.sub { display: grid; gap: 16px; min-width: 0; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.thumbs.art { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+.thumb { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); padding: 6px; display: grid; gap: 4px; text-align: left; min-width: 0; }
+.thumb canvas { width: 100%; aspect-ratio: 1.414 / 1; background: var(--paper); border-radius: 4px; display: block; }
+.thumb span { font: 600 13px/1.2 var(--font-body); }
+.thumb small { font: 400 11px var(--font-data); color: var(--muted); }
+.thumb[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.previewwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (min-width: 900px) { .previewwrap { grid-template-columns: minmax(0, 1fr) 280px; } }
+.canvasbox.small { aspect-ratio: 1.6 / 1; }
+.seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.seg button { flex: 1; min-width: 60px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--key); font-weight: 600; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.filebtn { position: relative; overflow: hidden; }
+.filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+input[type=range] { accent-color: var(--accent); width: 100%; }
+#padCard[hidden] { display: none !important; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 @media (max-width: 560px) {
   .stop { padding: 10px 16px; }
@@ -205,6 +239,8 @@ dialog ol { padding-left: 20px; margin: 8px 0 14px; }
   </div>
 </header>
 
+<nav class="wrap menubar" id="menubar" aria-label="Menüs des Roboters"></nav>
+
 <main class="wrap">
   <div style="min-width:0">
     <div class="nobt" id="noBt" hidden>
@@ -212,142 +248,289 @@ dialog ol { padding-left: 20px; margin: 8px 0 14px; }
       <b>Chrome</b> auf Android und der App <b>Bluefy</b> auf dem iPhone. Die Seite muss über
       <b>https</b> geöffnet sein. Zum Ausprobieren ohne Roboter: <b>Demo</b>.
     </div>
-    <nav class="tabs" role="tablist" id="tabs">
-      <button role="tab" data-tab="steuer" aria-selected="true">Tasten</button>
-      <button role="tab" data-tab="fahren" aria-selected="false">Fahren</button>
-      <button role="tab" data-tab="zeichnen" aria-selected="false">Zeichnen</button>
-      <button role="tab" data-tab="einst" aria-selected="false">Kalibrieren</button>
-      <button role="tab" data-tab="log" aria-selected="false" class="log-tab">Protokoll</button>
-    </nav>
+    <div class="banner" id="menuBanner" hidden></div>
 
-    <!-- TASTEN -->
-    <section class="pane" id="pane-steuer">
+    <!-- MENÜ 0: LEERLAUF -->
+    <section class="pane" id="pane-m0" data-menu="0">
+      <div class="pane-head"><h2>Leerlauf</h2><p class="hint">Hier steht der Roboter still. Von hier aus die Tests und Einstellungen; Fahren erst in einem der Menüs oben.</p></div>
       <div class="grid2">
+        <div class="card" id="padHome-m0"></div>
         <div class="card">
-          <h3>Bluefruit-Tasten</h3>
-          <p class="hint">Wie in der Bluefruit-App. Am PC auch per Tastatur: Pfeiltasten, 1–4, Leertaste = Stop.</p>
-          <div class="pad" aria-label="Steuerkreuz">
-            <span></span><button class="key" data-key="5" aria-label="Pfeil hoch">▲</button><span></span>
-            <button class="key" data-key="7" aria-label="Pfeil links">◀</button><span></span><button class="key" data-key="8" aria-label="Pfeil rechts">▶</button>
-            <span></span><button class="key" data-key="6" aria-label="Pfeil runter">▼</button><span></span>
-          </div>
-          <div class="keys">
-            <button class="key num" data-key="1">1</button>
-            <button class="key num" data-key="2">2</button>
-            <button class="key num" data-key="3">3</button>
-            <button class="key num" data-key="4">4</button>
-          </div>
-          <p class="hint">Gedrückt halten = langer Druck (ab 0,8 s), genau wie in der Bluefruit-App.</p>
-        </div>
-        <div class="card">
-          <h3 id="kmTitle">Tasten in Menü 0</h3>
-          <dl class="keymap" id="keymap"></dl>
-        </div>
-      </div>
-      <div class="card">
-        <h3>Menü wählen</h3>
-        <div class="menus" id="menus"></div>
-      </div>
-    </section>
-
-    <!-- FAHREN -->
-    <section class="pane" id="pane-fahren" hidden>
-      <div class="banner" id="fahrBanner"></div>
-      <div class="grid2">
-        <div class="card">
-          <h3>Geradeaus</h3>
-          <div class="row">
-            <label class="field">Strecke (cm)<input type="number" id="inDist" value="20" min="0.5" max="300" step="0.5"></label>
-            <button class="btn" id="btnFwd">Vor</button>
-            <button class="btn" id="btnBack">Zurück</button>
-          </div>
-          <div class="row" id="quickDist"></div>
-          <p class="hint">Vorwärts hält der Roboter bei einem Hindernis von selbst an.</p>
-        </div>
-        <div class="card">
-          <h3>Drehen auf der Stelle</h3>
-          <div class="row">
-            <label class="field">Winkel (Grad)<input type="number" id="inTurn" value="90" min="1" max="720" step="1"></label>
-            <button class="btn" id="btnLeft">Links</button>
-            <button class="btn" id="btnRight">Rechts</button>
-          </div>
-          <div class="row" id="quickTurn"></div>
-        </div>
-        <div class="card">
-          <h3>Stift und Tempo</h3>
-          <div class="row">
-            <button class="btn" id="btnPenUp">Stift hoch</button>
-            <button class="btn" id="btnPenDown">Stift runter</button>
-          </div>
-          <div class="row" id="speedBtns"></div>
+          <h3>Roboter</h3>
+          <dl class="stats" id="robotInfo"></dl>
         </div>
       </div>
     </section>
 
-    <!-- ZEICHNEN -->
-    <section class="pane" id="pane-zeichnen" hidden>
-      <div class="drawwrap">
-        <div style="display:grid;gap:10px;min-width:0;align-content:start">
-          <div class="tools" id="tools">
-            <button class="btn small on" data-tool="free">Freihand</button>
-            <button class="btn small" data-tool="line">Linienzug</button>
-            <button class="btn small" data-tool="rect">Rechteck</button>
-            <button class="btn small" data-tool="circle">Kreis</button>
-            <button class="btn small" id="btnFinish" hidden>Linienzug fertig</button>
-            <span style="flex:1"></span>
-            <button class="btn small" id="btnUndo">Rückgängig</button>
-            <button class="btn small" id="btnClear">Leeren</button>
+    <!-- MENÜ 1: FERNSTEUERUNG -->
+    <section class="pane" id="pane-m1" data-menu="1" hidden>
+      <div class="pane-head"><h2>Fernsteuerung</h2><p class="hint">Steuerkreuz wie in der Bluefruit-App: eine Richtung einmal antippen = fahren, nochmal = anhalten.</p></div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Freigabe und Tempo</h3>
+          <div class="row">
+            <button class="btn primary" data-tap="2">Steuerkreuz freigeben / sperren</button>
           </div>
-          <div class="canvasbox" id="cbox"><canvas id="cv"></canvas></div>
-          <div class="legend">
-            <span><i></i>Linie (Stift unten)</span>
-            <span><i class="tr"></i>Leerfahrt (Stift oben)</span>
-            <span>● Drehpunkt</span>
-            <span>Roboter startet in der Blattmitte, Blick nach rechts</span>
+          <div class="row">
+            <button class="btn" data-tap="3">Tempo wechseln</button>
+            <span class="hint">aktuell: <b id="m1Speed">–</b></span>
           </div>
+          <p class="hint">Nach dem Betreten ist das Steuerkreuz gesperrt. Ein Menüwechsel oder Stop sperrt wieder.</p>
         </div>
-        <div style="display:grid;gap:12px;align-content:start;min-width:0">
+        <div class="card" id="padHome-m1"></div>
+      </div>
+    </section>
+
+    <!-- MENÜ 2: MUSTER -->
+    <section class="pane" id="pane-m2" data-menu="2" hidden>
+      <div class="pane-head"><h2>Muster</h2><p class="hint">Fest eingebaute Muster oder ein eigenes Bild, das die App in Linien umwandelt.</p></div>
+      <nav class="subtabs" id="m2tabs">
+        <button data-sub="muster" aria-selected="true">Gespeicherte Muster</button>
+        <button data-sub="bild" aria-selected="false">Bild hochladen</button>
+      </nav>
+      <div id="m2-muster" class="sub">
+        <div class="thumbs" id="patThumbs"></div>
+        <div class="previewwrap">
+          <div class="canvasbox small" id="patBox"><canvas id="patCv"></canvas></div>
           <div class="card">
-            <h3>Blatt</h3>
+            <h3 id="patTitle">Muster</h3>
+            <dl class="stats" id="patStats"></dl>
             <div class="row">
-              <label class="field">Format<select id="selPaper"></select></label>
-              <label class="field">Raster<select id="selSnap"><option value="0">aus</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label>
+              <button class="btn primary" data-tap="2" id="patStart">Starten / abbrechen</button>
+              <button class="btn" data-hold="2">Entfernungsmesser an/aus</button>
             </div>
-            <label class="check"><input type="checkbox" id="chkOpt" checked><span>Reihenfolge optimieren (kürzere Leerfahrten)</span></label>
+            <p class="hint">Gezeichnet wird ab der Stelle, an der der Roboter steht – die erste Strecke in seine Blickrichtung. Tempo beim Zeichnen: Langsam.</p>
+          </div>
+        </div>
+      </div>
+      <div id="m2-bild" class="sub" hidden>
+        <div class="drawwrap">
+          <div style="display:grid;gap:10px;min-width:0;align-content:start">
             <div class="row">
-              <label class="field">Vorlage<select id="selTpl">
-                <option value="">– wählen –</option>
-                <option value="square">Quadrat 100 mm</option>
-                <option value="nikolaus">Haus vom Nikolaus</option>
-                <option value="star">Stern</option>
-                <option value="spiral">Spirale</option>
-                <option value="heart">Herz</option>
+              <label class="btn primary filebtn">Bild wählen …<input type="file" id="imgFile" accept="image/*"></label>
+              <span class="hint" id="imgName">JPG oder PNG, am besten kontrastreich (Strichzeichnung, Logo, Porträt mit hellem Hintergrund)</span>
+            </div>
+            <div class="canvasbox" id="imgBox"><canvas id="imgCv"></canvas></div>
+            <div class="legend">
+              <span><i></i>Linie (Stift unten)</span>
+              <span><label style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="imgShowSrc" checked> Original darunter</label></span>
+            </div>
+          </div>
+          <div style="display:grid;gap:12px;align-content:start;min-width:0">
+            <div class="card">
+              <h3>Umwandeln</h3>
+              <label class="field">Verfahren<select id="imgMode">
+                <option value="outline">Umriss (Kontur der dunklen Flächen)</option>
+                <option value="iso">Höhenlinien (mehrere Helligkeitsstufen)</option>
+                <option value="hatch">Schraffur (Linien je nach Dunkelheit)</option>
               </select></label>
+              <label class="field"><span>Schwelle <b id="imgThrV"></b></span><input type="range" id="imgThr" min="5" max="95" value="50"></label>
+              <label class="field" id="imgLevelsF"><span>Stufen <b id="imgLevelsV"></b></span><input type="range" id="imgLevels" min="2" max="5" value="3"></label>
+              <label class="field" id="imgSpacingF"><span>Linienabstand <b id="imgSpacingV"></b></span><input type="range" id="imgSpacing" min="2" max="12" value="4"></label>
+              <label class="field"><span>Vereinfachen <b id="imgDetailV"></b></span><input type="range" id="imgDetail" min="1" max="30" value="6"></label>
+              <label class="field"><span>Kürzeste Linie <b id="imgMinV"></b></span><input type="range" id="imgMin" min="0" max="30" value="4"></label>
+              <label class="check"><input type="checkbox" id="imgInvert"><span>Hell und dunkel tauschen</span></label>
+              <div class="row">
+                <label class="field">Blatt<select id="imgPaper"></select></label>
+                <label class="field"><span>Größe <b id="imgSizeV"></b></span><input type="range" id="imgSize" min="20" max="100" value="80"></label>
+              </div>
             </div>
-          </div>
-          <div class="card">
-            <h3>Pfad-Vorschau</h3>
-            <label class="check"><input type="checkbox" id="chkPlan" checked><span>Fahrweg einblenden</span></label>
-            <dl class="stats" id="planStats"></dl>
-            <ul class="warnlist" id="planWarn"></ul>
-            <div class="row">
-              <button class="btn small" id="btnPlay">▶ Abspielen</button>
-              <select id="selPlaySpeed" aria-label="Abspieltempo"><option value="5">5×</option><option value="20" selected>20×</option><option value="60">60×</option></select>
+            <div class="card">
+              <h3>Ergebnis</h3>
+              <dl class="stats" id="imgStats"></dl>
+              <ul class="warnlist" id="imgWarn"></ul>
+              <button class="btn primary" id="imgSend">Bild zeichnen lassen</button>
+              <progress id="imgProg" max="100" value="0" hidden></progress>
+              <p class="hint" id="imgInfo">Roboter in die Blattmitte stellen, Blick nach rechts.</p>
             </div>
-            <input type="range" id="rngScrub" min="0" max="1000" value="1000" aria-label="Vorschau-Zeitpunkt">
-          </div>
-          <div class="card">
-            <h3>Zeichnen lassen</h3>
-            <button class="btn primary" id="btnSend">An Roboter senden</button>
-            <progress id="sendProg" max="100" value="0" hidden></progress>
-            <p class="hint" id="sendInfo">Die Zeichnung wird übertragen, danach fragt die App noch einmal nach.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- KALIBRIEREN -->
+    <!-- MENÜ 3: ZUFALLSFAHRT -->
+    <section class="pane" id="pane-m3" data-menu="3" hidden>
+      <div class="pane-head"><h2>Zufallsfahrt</h2><p class="hint">Der Roboter fährt selbstständig Zufallsstrecken und weicht Hindernissen aus (Entfernungsmesser ist automatisch an).</p></div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Fahrt</h3>
+          <button class="btn primary" data-tap="2">Starten / stoppen</button>
+          <p class="hint">Bei einem Hindernis: anhalten, mit dem Schwenkservo umschauen, in die freieste Richtung drehen – oder zurücksetzen, wenn kein Platz ist. Die Abstände stehen oben in der Statuszeile.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- MENÜ 4: DRIFTKORREKTUR -->
+    <section class="pane" id="pane-m4" data-menu="4" hidden>
+      <div class="pane-head"><h2>Driftkorrektur</h2><p class="hint">Gerade Testfahrt mit dem Optical-Flow-Sensor und Drehkalibrierung.</p></div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Testfahrt 100 cm</h3>
+          <div class="row">
+            <button class="btn primary" data-tap="2">Starten / abbrechen</button>
+            <button class="btn" data-tap="3">Korrektur an / aus</button>
+          </div>
+          <p class="hint">Nach der Fahrt meldet der Roboter Strecke, Querabweichung und einen Kalibriervorschlag im Protokoll.</p>
+        </div>
+        <div class="card">
+          <h3>Drehkalibrierung</h3>
+          <button class="btn" data-confirm="1">Drehkalibrierung starten</button>
+          <p class="hint">Fährt 30 cm vor und zurück und dreht sechsmal 360°. Dauert ca. 1 Minute, mindestens 45 cm Platz.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- MENÜ 6: HARDWARETEST -->
+    <section class="pane" id="pane-m6" data-menu="6" hidden>
+      <div class="pane-head"><h2>Hardwaretest</h2><p class="hint">Einzelne Teile prüfen. Ergebnisse und Hinweise stehen im Protokoll.</p></div>
+      <div class="grid3">
+        <div class="card">
+          <h3>Fahren</h3>
+          <button class="btn primary" data-confirm="1">Fahrtest starten</button>
+          <p class="hint">20 cm vor, 20 cm zurück, 90° rechts, 90° links – mit Ansage, was passieren soll.</p>
+        </div>
+        <div class="card">
+          <h3>Servos</h3>
+          <button class="btn primary" data-tap="2">Servotest</button>
+          <p class="hint">Erst der Schwenkservo (Mitte, links, rechts), dann der Stift (oben, unten, oben).</p>
+        </div>
+        <div class="card">
+          <h3>Entfernungsmesser</h3>
+          <button class="btn primary" data-tap="3">Rundum messen</button>
+          <p class="hint">Fünf Richtungen, je drei Messungen, dazu Rohwert und Zähler.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- MENÜ 7: KUNST -->
+    <section class="pane" id="pane-m7" data-menu="7" hidden>
+      <div class="pane-head"><h2>Generative Kunst</h2><p class="hint">Algorithmus antippen, Seed und Blatt wählen – die App stellt den Roboter passend ein.</p></div>
+      <div class="thumbs art" id="artThumbs"></div>
+      <div class="previewwrap">
+        <div class="canvasbox" id="artBox"><canvas id="artCv"></canvas></div>
+        <div class="card">
+          <h3 id="artTitle">–</h3>
+          <div class="row">
+            <button class="btn small" id="artSeedDown" aria-label="Seed minus 1">−</button>
+            <label class="field">Seed<input type="number" id="artSeed" min="1" max="999999" value="1"></label>
+            <button class="btn small" id="artSeedUp" aria-label="Seed plus 1">+</button>
+          </div>
+          <div class="row">
+            <button class="btn small" id="artRand">Zufällig</button>
+            <button class="btn small" data-tap="1" title="Taste 1: Seed aus dem Entfernungssensor">Seed vom Sensor</button>
+          </div>
+          <div class="seg" id="artPaper"></div>
+          <dl class="stats" id="artStats"></dl>
+          <p class="hint" id="artSync"></p>
+          <button class="btn primary" data-tap="2">Zeichnen / abbrechen</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MENÜ 8: APP-FAHREN -->
+    <section class="pane" id="pane-m8" data-menu="8" hidden>
+      <div class="pane-head"><h2>App-Fahren</h2><p class="hint">Fahrbefehle mit genauen Strecken und Winkeln, oder eine Zeichnung am Bildschirm.</p></div>
+      <div class="banner" id="fahrBanner"></div>
+      <nav class="subtabs" id="m8tabs">
+        <button data-sub="fahren" aria-selected="true">Fahrbefehle</button>
+        <button data-sub="zeichnen" aria-selected="false">Zeichnen</button>
+      </nav>
+      <div id="m8-fahren" class="sub">
+        <div class="grid2">
+          <div class="card">
+            <h3>Geradeaus</h3>
+            <div class="row">
+              <label class="field">Strecke (cm)<input type="number" id="inDist" value="20" min="0.5" max="300" step="0.5"></label>
+              <button class="btn" id="btnFwd">Vor</button>
+              <button class="btn" id="btnBack">Zurück</button>
+            </div>
+            <div class="row" id="quickDist"></div>
+            <p class="hint">Vorwärts hält der Roboter bei einem Hindernis von selbst an.</p>
+          </div>
+          <div class="card">
+            <h3>Drehen auf der Stelle</h3>
+            <div class="row">
+              <label class="field">Winkel (Grad)<input type="number" id="inTurn" value="90" min="1" max="720" step="1"></label>
+              <button class="btn" id="btnLeft">Links</button>
+              <button class="btn" id="btnRight">Rechts</button>
+            </div>
+            <div class="row" id="quickTurn"></div>
+          </div>
+          <div class="card">
+            <h3>Stift und Tempo</h3>
+            <div class="row">
+              <button class="btn" id="btnPenUp">Stift hoch</button>
+              <button class="btn" id="btnPenDown">Stift runter</button>
+            </div>
+            <div class="row" id="speedBtns"></div>
+          </div>
+        </div>
+      </div>
+      <div id="m8-zeichnen" class="sub" hidden>
+        <div class="drawwrap">
+          <div style="display:grid;gap:10px;min-width:0;align-content:start">
+            <div class="tools" id="tools">
+              <button class="btn small on" data-tool="free">Freihand</button>
+              <button class="btn small" data-tool="line">Linienzug</button>
+              <button class="btn small" data-tool="rect">Rechteck</button>
+              <button class="btn small" data-tool="circle">Kreis</button>
+              <button class="btn small" id="btnFinish" hidden>Linienzug fertig</button>
+              <span style="flex:1"></span>
+              <button class="btn small" id="btnUndo">Rückgängig</button>
+              <button class="btn small" id="btnClear">Leeren</button>
+            </div>
+            <div class="canvasbox" id="cbox"><canvas id="cv"></canvas></div>
+            <div class="legend">
+              <span><i></i>Linie (Stift unten)</span>
+              <span><i class="tr"></i>Leerfahrt (Stift oben)</span>
+              <span>● Drehpunkt</span>
+              <span>Roboter startet in der Blattmitte, Blick nach rechts</span>
+            </div>
+          </div>
+          <div style="display:grid;gap:12px;align-content:start;min-width:0">
+            <div class="card">
+              <h3>Blatt</h3>
+              <div class="row">
+                <label class="field">Format<select id="selPaper"></select></label>
+                <label class="field">Raster<select id="selSnap"><option value="0">aus</option><option value="5">5 mm</option><option value="10">10 mm</option></select></label>
+              </div>
+              <label class="check"><input type="checkbox" id="chkOpt" checked><span>Reihenfolge optimieren (kürzere Leerfahrten)</span></label>
+              <div class="row">
+                <label class="field">Vorlage<select id="selTpl">
+                  <option value="">– wählen –</option>
+                  <option value="square">Quadrat 100 mm</option>
+                  <option value="nikolaus">Haus vom Nikolaus</option>
+                  <option value="star">Stern</option>
+                  <option value="spiral">Spirale</option>
+                  <option value="heart">Herz</option>
+                </select></label>
+              </div>
+            </div>
+            <div class="card">
+              <h3>Pfad-Vorschau</h3>
+              <label class="check"><input type="checkbox" id="chkPlan" checked><span>Fahrweg einblenden</span></label>
+              <dl class="stats" id="planStats"></dl>
+              <ul class="warnlist" id="planWarn"></ul>
+              <div class="row">
+                <button class="btn small" id="btnPlay">▶ Abspielen</button>
+                <select id="selPlaySpeed" aria-label="Abspieltempo"><option value="5">5×</option><option value="20" selected>20×</option><option value="60">60×</option></select>
+              </div>
+              <input type="range" id="rngScrub" min="0" max="1000" value="1000" aria-label="Vorschau-Zeitpunkt">
+            </div>
+            <div class="card">
+              <h3>Zeichnen lassen</h3>
+              <button class="btn primary" id="btnSend">An Roboter senden</button>
+              <progress id="sendProg" max="100" value="0" hidden></progress>
+              <p class="hint" id="sendInfo">Die Zeichnung wird übertragen, danach fragt die App noch einmal nach.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EINSTELLUNGEN -->
     <section class="pane" id="pane-einst" hidden>
+      <div class="pane-head"><h2>Einstellungen</h2><p class="hint">Kalibrierung und Darstellung. Ändert nichts am Menü des Roboters.</p></div>
       <div class="grid2">
         <div class="card">
           <h3>Aktuelle Werte im Roboter</h3>
@@ -358,7 +541,7 @@ dialog ol { padding-left: 20px; margin: 8px 0 14px; }
         </div>
         <div class="card">
           <h3>Drehung korrigieren</h3>
-          <p class="hint">Fahren-Register: 90° (oder 360°) drehen lassen und den echten Winkel messen.</p>
+          <p class="hint">In „App-Fahren“ 90° (oder 360°) drehen lassen und den echten Winkel messen.</p>
           <div class="row">
             <label class="field">befohlen (°)<input type="number" id="calTurnCmd" value="90"></label>
             <label class="field">gefahren (°)<input type="number" id="calTurnAct" value="100"></label>
@@ -388,6 +571,24 @@ dialog ol { padding-left: 20px; margin: 8px 0 14px; }
     </section>
 
     <section class="pane log-tab" id="pane-log" hidden></section>
+
+    <!-- Bluefruit-Tasten: wandert in das jeweils sichtbare Menü (padHome-…) -->
+    <div id="padCard" style="display:grid;gap:12px">
+      <h3>Bluefruit-Tasten</h3>
+      <div class="pad" aria-label="Steuerkreuz">
+        <span></span><button class="key" data-key="5" aria-label="Pfeil hoch">▲</button><span></span>
+        <button class="key" data-key="7" aria-label="Pfeil links">◀</button><span></span><button class="key" data-key="8" aria-label="Pfeil rechts">▶</button>
+        <span></span><button class="key" data-key="6" aria-label="Pfeil runter">▼</button><span></span>
+      </div>
+      <div class="keys">
+        <button class="key num" data-key="1">1</button>
+        <button class="key num" data-key="2">2</button>
+        <button class="key num" data-key="3">3</button>
+        <button class="key num" data-key="4">4</button>
+      </div>
+      <dl class="keymap" id="keymap"></dl>
+      <p class="hint">Gedrückt halten = langer Druck (ab 0,8 s). Am PC auch per Tastatur: Pfeiltasten, 1–4, Leertaste = Stop.</p>
+    </div>
   </div>
 
   <aside id="logAside" style="min-width:0">
@@ -405,6 +606,15 @@ dialog ol { padding-left: 20px; margin: 8px 0 14px; }
     </div>
   </aside>
 </main>
+
+<dialog id="dlgConfirm">
+  <h3 id="dlgCTitle">Fahrt bestätigen</h3>
+  <p id="dlgCText"></p>
+  <div class="row" style="justify-content:flex-end">
+    <button class="btn" id="dlgCNo">Abbrechen</button>
+    <button class="btn primary" id="dlgCYes">Bestätigen</button>
+  </div>
+</dialog>
 
 <dialog id="dlgRun">
   <h3>Zeichnung starten?</h3>
@@ -429,6 +639,7 @@ dialog ol { padding-left: 20px; margin: 8px 0 14px; }
   </div>
 </dialog>
 
+<script src="art-gen.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
