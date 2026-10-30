@@ -295,11 +295,19 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
           <div class="card">
             <h3 id="patTitle">Muster</h3>
             <dl class="stats" id="patStats"></dl>
-            <div class="row">
-              <button class="btn primary" data-tap="2" id="patStart">Starten / abbrechen</button>
-              <button class="btn" data-hold="2">Entfernungsmesser an/aus</button>
+            <div id="patFwCtl" style="display:grid;gap:10px">
+              <div class="row">
+                <button class="btn primary" data-tap="2" id="patStart">Starten / abbrechen</button>
+                <button class="btn" data-hold="2">Entfernungsmesser an/aus</button>
+              </div>
+              <p class="hint">Gezeichnet wird ab der Stelle, an der der Roboter steht – die erste Strecke in seine Blickrichtung. Tempo beim Zeichnen: Langsam.</p>
             </div>
-            <p class="hint">Gezeichnet wird ab der Stelle, an der der Roboter steht – die erste Strecke in seine Blickrichtung. Tempo beim Zeichnen: Langsam.</p>
+            <div id="shapeCtl" style="display:grid;gap:10px" hidden>
+              <label class="field"><span id="shapeLbl">Radius (mm)</span><input type="number" id="shapeSize" min="10" max="250" step="5" value="50"></label>
+              <button class="btn primary" id="shapeSend">Zeichnen lassen</button>
+              <progress id="shapeProg" max="100" value="0" hidden></progress>
+              <p class="hint" id="shapeInfo">Roboter mit dem Stift auf die Mitte der Form stellen, Blick nach rechts. Er fährt mit Stift oben zum Rand, zeichnet und kommt zurück.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -503,6 +511,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
                   <option value="star">Stern</option>
                   <option value="spiral">Spirale</option>
                   <option value="heart">Herz</option>
+                  <option value="circle">Kreis Ø 100 mm</option>
                 </select></label>
               </div>
             </div>
@@ -558,6 +567,34 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
           </div>
           <p class="hint" id="calDistOut"></p>
           <button class="btn" id="btnCalDist">Raddurchmesser übernehmen</button>
+        </div>
+        <div class="card">
+          <h3>Links- und Rechtsdrehung getrennt</h3>
+          <p class="hint">Wenn Formen mit Links- <i>und</i> Rechtsdrehungen (Koch-Schneeflocke, Prüfquadrat) verzogen sind, ist eine Drehrichtung ungenau. Roboter auf eine Markierung stellen, 360° drehen lassen, echten Winkel ablesen.</p>
+          <div class="row">
+            <button class="btn small" id="tfTestR">360° rechts drehen</button>
+            <label class="field">rechts gefahren (°)<input type="number" id="tfMeasR" value="360" min="200" max="500"></label>
+          </div>
+          <div class="row">
+            <button class="btn small" id="tfTestL">360° links drehen</button>
+            <label class="field">links gefahren (°)<input type="number" id="tfMeasL" value="360" min="200" max="500"></label>
+          </div>
+          <p class="hint" id="tfOut"></p>
+          <button class="btn" id="tfSet">Faktoren übernehmen</button>
+        </div>
+        <div class="card">
+          <h3>Stift einstellen</h3>
+          <p class="hint">Oben: der Stift darf das Papier nicht mehr berühren (sonst gestrichelte Leerfahrten). Unten: er soll nur aufliegen, nicht drücken – sonst verlieren die Räder Halt. Der Roboter muss in Menü 0 oder 8 sein.</p>
+          <div class="row">
+            <label class="field">Oben (°)<input type="number" id="penUpIn" min="0" max="180" step="1" value="100"></label>
+            <label class="field">Unten (°)<input type="number" id="penDownIn" min="0" max="180" step="1" value="60"></label>
+          </div>
+          <div class="row">
+            <button class="btn" id="penSet">Winkel übernehmen</button>
+            <button class="btn small" id="penTestUp">Stift hoch</button>
+            <button class="btn small" id="penTestDown">Stift runter</button>
+          </div>
+          <p class="hint">Gilt bis zum Neustart. Dauerhaft in <code>global.h</code>: <code id="penLines"></code></p>
         </div>
         <div class="card">
           <h3>Darstellung</h3>

@@ -46,7 +46,7 @@ const SPEED_NAMES = ['Langsam', 'Mittel', 'Schnell'];
 const DEFAULT_CFG = {
   wheel: 63.0, track: 142.5, spr: 500, spt: 1131, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
   prof: [{ v: 150, a: 250 }, { v: 280, a: 350 }, { v: 420, a: 450 }],
-  art: [0, 2], penms: 300, ret: 1, keep: 1
+  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000
 };
 const MIN_SEG_MM = 1.0;
 
@@ -168,7 +168,7 @@ class DemoLink {
   }
   cfgLine() {
     const c = this.s.cfg;
-    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep}`);
+    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr}`);
   }
   canDrive() {
     const s = this.s;
@@ -214,12 +214,16 @@ class DemoLink {
         s.move = { left: moveSec(d, v, a) * 1000 };
         this.say('@OK ' + w); break;
       }
-      case 'PEN': if (s.menu !== 8) { this.say('@ERR menu Stift nur in Menue 8'); break; } s.pen = /^d/i.test(arg) ? 1 : 0; this.say('@OK PEN'); break;
+      case 'PEN': if (s.menu !== 8 && s.menu !== 0) { this.say('@ERR menu Stift nur in Menue 0 und 8'); break; } s.pen = /^d/i.test(arg) ? 1 : 0; this.say('@OK PEN'); break;
       case 'SPEED': { const i = parseInt(arg, 10); if (!(i >= 0 && i <= 2)) { this.say('@ERR arg SPEED 0..2'); break; } s.sp = i; this.say('Geschwindigkeit: ' + SPEED_NAMES[i]); this.say('@OK SPEED'); break; }
       case 'SET': {
         const [k, val] = arg.split(/\s+/), x = parseFloat(val);
         if (/^track$/i.test(k) && x >= 50 && x <= 400) c.track = x;
         else if (/^wheel$/i.test(k) && x >= 20 && x <= 150) c.wheel = x;
+        else if (/^penup$/i.test(k) && x >= 0 && x <= 180) c.pu = Math.round(x);
+        else if (/^pendown$/i.test(k) && x >= 0 && x <= 180) c.pd = Math.round(x);
+        else if (/^turnl$/i.test(k) && x >= 0.8 && x <= 1.25) c.tl = Math.round(x * 1000);
+        else if (/^turnr$/i.test(k) && x >= 0.8 && x <= 1.25) c.tr = Math.round(x * 1000);
         else { this.say('@ERR arg SET TRACK mm | SET WHEEL mm'); break; }
         this.say('Wert gilt bis zum Neustart -- dauerhaft in global.h eintragen.'); this.say('@OK SET'); this.cfgLine(); break;
       }
@@ -310,7 +314,7 @@ function handleLine(line) {
     }
     case '@CFG': {
       const o = parseKV(rest), c = st.cfg;
-      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep']) if (o[k] !== undefined) c[k] = +o[k];
+      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr']) if (o[k] !== undefined) c[k] = +o[k];
       if (o.mode) c.mode = o.mode;
       if (o.prof) c.prof = o.prof.split(',').map(t => { const [v, a] = t.split('/'); return { v: +v, a: +a }; });
       if (o.art) c.art = o.art.split(',').map(Number);
@@ -423,8 +427,32 @@ function renderCfg() {
     ['Weg pro Schritt', mm.toFixed(3) + ' mm'],
     ...c.prof.map((p, i) => [SPEED_NAMES[i], (p.v * mm / 10).toFixed(1) + ' cm/s']),
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}`;
+  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}`;
+  if (document.activeElement !== $('penUpIn')) $('penUpIn').value = c.pu;
+  if (document.activeElement !== $('penDownIn')) $('penDownIn').value = c.pd;
+  $('penLines').textContent = `penUpAngle = ${c.pu}; penDownAngle = ${c.pd};`;
+  updateTurnFactors();
   updateCal();
+}
+/* Links/Rechts-Faktoren (Firmware V16a: @CFG tl/tr in Promille) */
+function turnFactorsNew() {
+  const c = st.cfg, mr = +$('tfMeasR').value, ml = +$('tfMeasL').value;
+  const fr = mr > 0 ? c.tr / 1000 * 360 / mr : NaN, fl = ml > 0 ? c.tl / 1000 * 360 / ml : NaN;
+  return { fr, fl };
+}
+function updateTurnFactors() {
+  const c = st.cfg, { fr, fl } = turnFactorsNew();
+  const ok = x => isFinite(x) && x >= 0.8 && x <= 1.25;
+  $('tfOut').textContent = `Jetzt: rechts ${(c.tr / 1000).toFixed(3)}, links ${(c.tl / 1000).toFixed(3)} → neu: rechts ${ok(fr) ? fr.toFixed(3) : '–'}, links ${ok(fl) ? fl.toFixed(3) : '–'}` +
+    `  ·  global.h: #define TURN_FACTOR_RIGHT ${ok(fr) ? fr.toFixed(3) : '…'} / #define TURN_FACTOR_LEFT ${ok(fl) ? fl.toFixed(3) : '…'}`;
+  $('tfSet').disabled = !st.connected || !ok(fr) || !ok(fl);
+}
+async function armedIn8() {
+  if (!(await ensureMenu(8))) return false;
+  if (st.armed) return true;
+  if (!(await confirmDialog('Fahren freigeben?', 'Der Roboter dreht sich gleich einmal ganz um sich selbst. Platz lassen.', 'Freigeben'))) return false;
+  sendText('ARM');
+  try { await expect(/^@OK ARM/); return true; } catch (e) { logLine('Freigabe: ' + e.message, 'err'); return false; }
 }
 function updateCal() {
   const c = st.cfg;
@@ -577,6 +605,7 @@ function template(name) {
   if (name === 'nikolaus') S.push([[-40, -50], [40, -50], [-40, 20], [40, 20], [0, 70], [-40, 20], [-40, -50], [40, 20], [40, -50]]);
   if (name === 'star') { const s = []; for (let i = 0; i <= 5; i++) { const a = Math.PI / 2 + i * 4 * Math.PI / 5; s.push([80 * Math.cos(a), 80 * Math.sin(a)]); } S.push(s); }
   if (name === 'spiral') { const s = []; for (let a = 0; a <= 8 * Math.PI; a += 0.15) s.push([a * 3.6 * Math.cos(a), a * 3.6 * Math.sin(a)]); S.push(s); }
+  if (name === 'circle') S.push(circlePts(50));
   if (name === 'heart') { const s = []; for (let a = 0; a <= 2 * Math.PI + 0.01; a += 0.08) s.push([5 * 16 * Math.sin(a) ** 3, 5 * (13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a))]); S.push(s); }
   return S.map(s => s.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]));
 }
@@ -631,7 +660,7 @@ function render() {
   ctx.fillText(`${draw.paper} · ${W} × ${H} mm`, x0 + 6, y0 + 14);
 
   const plan = draw.plan, showPlan = $('chkPlan').checked && plan;
-  const liveHere = st.live && st.live.target !== 'img';
+  const liveHere = st.live && st.live.target === 'draw';
   const tNow = liveHere && plan ? liveTime() : (draw.playT != null && plan ? draw.playT : null);
   const ink = css('--accent'), travel = css('--travel');
 
@@ -675,7 +704,7 @@ function render() {
     ctx.strokeStyle = ink; ctx.lineWidth = 1.6; pathLine(draw.cur.concat(draw.hover ? [draw.hover] : [])); ctx.stroke();
   }
   // Roboter
-  if (st.live && st.live.target !== 'img' && st.live.done !== 'ok' && st.live.done !== 'abort') drawRobot(st.live.x, st.live.y, st.live.h, css('--ok'));
+  if (st.live && st.live.target === 'draw' && st.live.done !== 'ok' && st.live.done !== 'abort') drawRobot(st.live.x, st.live.y, st.live.h, css('--ok'));
   else if (showPlan && tNow != null) { const p = poseAt(plan, tNow); drawRobot(p.x, p.y, p.h, css('--fg')); }
   else drawRobot(0, 0, 0, '#7b8494');
 }
@@ -690,7 +719,7 @@ function renderLive() {
   const pr = l.prog || $('sendProg'), info = l.info || $('sendInfo');
   pr.hidden = false; pr.max = l.n; pr.value = l.done === 'ok' ? l.n : Math.max(0, l.i - 1);
   info.textContent = l.done === 'ok' ? 'Fertig gezeichnet.' : l.done === 'abort' ? 'Abgebrochen.' : `Zeichnet: Punkt ${l.i} von ${l.n}`;
-  if (l.target === 'img') renderImg(); else render();
+  if (l.target === 'img') renderImg(); else if (l.target === 'shape') renderPatterns(); else render();
 }
 
 /* Zeichenwerkzeuge */
@@ -985,21 +1014,65 @@ function drawPathOn(cvs, pts, opts = {}) {
     g.beginPath(); g.moveTo(a, b); g.lineTo(a + 22, b); g.lineTo(a + 16, b - 4); g.moveTo(a + 22, b); g.lineTo(a + 16, b + 4); g.stroke();
   }
 }
+/* Formen, die die App selbst erzeugt und als Zeichnung schickt (30.10.2026) */
+const APP_SHAPES = [
+  { key: 'circle', name: 'Kreis', label: 'Radius (mm)', def: 50 },
+  { key: 'square', name: 'Prüfquadrat', label: 'Seitenlänge (mm)', def: 100 },   // links herum, dann rechts herum
+];
+function circlePts(r) {   // Polygon mit ca. 3 mm Kantenlänge, gegen den Uhrzeigersinn, Start rechts
+  const n = Math.max(24, Math.min(240, Math.ceil(2 * Math.PI * r / 3))), out = [];
+  for (let i = 0; i <= n; i++) { const a = i / n * 2 * Math.PI; out.push([Math.round(r * Math.cos(a) * 10) / 10, Math.round(r * Math.sin(a) * 10) / 10]); }
+  return out;
+}
+function shapeStroke(key, size) {
+  if (key === 'circle') return circlePts(size);
+  // Prüfquadrat: erst gegen den Uhrzeigersinn (nur Linksdrehungen), dann dasselbe
+  // Quadrat im Uhrzeigersinn (nur Rechtsdrehungen). Stimmen beide Drehrichtungen,
+  // liegen die Linien genau übereinander; sonst sieht man zwei verdrehte Quadrate.
+  const h = size / 2; return [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h], [-h, h], [h, h], [h, -h], [-h, -h]];
+}
+function shapePoints(key, size) { return shapeStroke(key, size).map((p, i) => ({ x: p[0], y: p[1], pen: i ? 1 : 0 })); }
+function patSel() { return typeof st.pat === 'string' ? APP_SHAPES.find(a => a.key === st.pat) : null; }
+
 function renderPatterns() {
   const box = $('patThumbs'); if (!box) return;
   if (!box.dataset.built) {
-    box.innerHTML = PATTERNS.map((p, i) => `<button class="thumb" data-pat="${i}"><canvas></canvas><span>${p.name}</span><small>${p.pts.length} Strecken</small></button>`).join('');
+    box.innerHTML = PATTERNS.map((p, i) => `<button class="thumb" data-pat="${i}"><canvas></canvas><span>${p.name}</span><small>${p.pts.length} Strecken · im Roboter</small></button>`).join('') +
+      APP_SHAPES.map(a => `<button class="thumb" data-pat="${a.key}"><canvas></canvas><span>${a.name}</span><small>Größe wählbar · aus der App</small></button>`).join('');
     box.dataset.built = '1';
     box.onclick = async ev => {
       const b = ev.target.closest('[data-pat]'); if (!b) return;
-      st.pat = +b.dataset.pat; renderPatterns();
-      if (st.connected && await ensureMenu(2)) sendText('PATTERN ' + st.pat);
+      const v = b.dataset.pat;
+      if (/^\d+$/.test(v)) {
+        st.pat = +v; renderPatterns();
+        if (st.connected && await ensureMenu(2)) sendText('PATTERN ' + st.pat);
+      } else {
+        st.pat = v; const a = patSel(); $('shapeSize').value = load('shape.' + v, a.def); renderPatterns();
+      }
     };
   }
   box.querySelectorAll('[data-pat]').forEach(b => {
-    b.setAttribute('aria-pressed', +b.dataset.pat === st.pat);
-    drawPathOn(b.querySelector('canvas'), patternPath(+b.dataset.pat), { pad: 8, lw: 1.5 });
+    const v = b.dataset.pat, fw = /^\d+$/.test(v);
+    b.setAttribute('aria-pressed', String(fw ? +v === st.pat : v === st.pat));
+    drawPathOn(b.querySelector('canvas'), fw ? patternPath(+v) : shapeStroke(v, APP_SHAPES.find(a => a.key === v).def), { pad: 8, lw: 1.5 });
   });
+  const app = patSel();
+  $('patFwCtl').hidden = !!app; $('shapeCtl').hidden = !app;
+  if (app) {
+    const size = Math.max(10, Math.min(250, +$('shapeSize').value || app.def));
+    $('shapeLbl').textContent = app.label;
+    const stroke = shapeStroke(app.key, size), pts = shapePoints(app.key, size), plan = planRobot(pts, st.cfg);
+    drawPathOn($('patCv'), stroke, { grid: true, robot: true });
+    // Roboter-Startpunkt = Mitte der Form
+    const L = app.key === 'circle' ? 2 * Math.PI * size : 8 * size;
+    $('patTitle').textContent = app.name;
+    $('patStats').innerHTML = [[app.key === 'circle' ? 'Durchmesser' : 'Seite', app.key === 'circle' ? (2 * size) + ' mm' : size + ' mm'],
+      ['Linie', (L / 10).toFixed(1) + ' cm'], ['Punkte', pts.length], ['Dauer ca.', fmtTime(plan.total)], ['Start', 'Mitte der Form']]
+      .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+    st.shapeCur = { pts, plan };
+    $('shapeSend').disabled = st.sending;
+    return;
+  }
   const pts = patternPath(st.pat);
   drawPathOn($('patCv'), pts, { grid: true, robot: true });
   let L = 0; for (let k = 1; k < pts.length; k++) L += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
@@ -1008,6 +1081,10 @@ function renderPatterns() {
   $('patStats').innerHTML = [['Strecken', PATTERNS[st.pat].pts.length], ['Linie gesamt', (L / 10).toFixed(1) + ' cm'],
     ['Größe ca.', `${Math.max(...xs, 0) - Math.min(...xs, 0)} × ${Math.max(...ys, 0) - Math.min(...ys, 0)} cm`], ['Im Roboter', PATTERNS[st.pat].fw]]
     .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+}
+function sendShape() {
+  const app = patSel(); if (!app || !st.shapeCur) return;
+  return sendPath(st.shapeCur.pts, { menu: 2, paper: 'beliebig', plan: st.shapeCur.plan, prog: $('shapeProg'), info: $('shapeInfo'), target: 'shape', onState: renderPatterns });
 }
 
 /* ------------------------------------------------------------------ Menü 7: Kunst */
@@ -1362,6 +1439,22 @@ function init() {
   $('imgFile').onchange = ev => loadImageFile(ev.target.files[0]);
   ['imgMode', 'imgThr', 'imgLevels', 'imgSpacing', 'imgDetail', 'imgMin', 'imgInvert', 'imgPaper', 'imgSize'].forEach(id => $(id).addEventListener('input', () => { imgLabels(); clearTimeout(imgSt.t); imgSt.t = setTimeout(convertImage, 120); }));
   $('imgShowSrc').onchange = renderImg;
+  $('shapeSize').oninput = () => { const a = patSel(); if (a) store('shape.' + a.key, +$('shapeSize').value); renderPatterns(); };
+  $('shapeSend').onclick = sendShape;
+  // Einstellungen: Stift
+  const penAng = id => Math.max(0, Math.min(180, Math.round(+$(id).value || 0)));
+  const penMenu = async () => { if (st.menu === 0 || st.menu === 8) return true; return ensureMenu(0); };
+  $('penSet').onclick = async () => { if (!st.connected || !(await penMenu())) return; sendText('SET PENUP ' + penAng('penUpIn')); await sleep(150); sendText('SET PENDOWN ' + penAng('penDownIn')); };
+  $('penTestUp').onclick = async () => { if (st.connected && await penMenu()) sendText('PEN U'); };
+  ['tfMeasR', 'tfMeasL'].forEach(id => $(id).oninput = updateTurnFactors);
+  $('tfTestR').onclick = async () => { if (st.connected && await armedIn8()) sendText('TURN 360'); };
+  $('tfTestL').onclick = async () => { if (st.connected && await armedIn8()) sendText('TURN -360'); };
+  $('tfSet').onclick = async () => {
+    const { fr, fl } = turnFactorsNew(); if (!st.connected) return;
+    sendText('SET TURNR ' + fr.toFixed(3)); await sleep(150); sendText('SET TURNL ' + fl.toFixed(3));
+    $('tfMeasR').value = 360; $('tfMeasL').value = 360;
+  };
+  $('penTestDown').onclick = async () => { if (st.connected && await penMenu()) sendText('PEN D'); };
   $('imgSend').onclick = sendImage;
   new ResizeObserver(() => renderImg()).observe($('imgBox'));
   new ResizeObserver(() => renderPatterns()).observe($('patBox'));
