@@ -434,23 +434,47 @@ function renderCfg() {
   updateTurnFactors();
   updateCal();
 }
-/* Links/Rechts-Faktoren (Firmware V16a: @CFG tl/tr in Promille) */
-function turnFactorsNew() {
-  const c = st.cfg, mr = +$('tfMeasR').value, ml = +$('tfMeasL').value;
-  const fr = mr > 0 ? c.tr / 1000 * 360 / mr : NaN, fl = ml > 0 ? c.tl / 1000 * 360 / ml : NaN;
-  return { fr, fl };
+/* Drehtest mit Linie (V16b). Hinlinie L mm, 360° drehen, Rücklinie L mm.
+   Abstände der Rücklinie zur Hinlinie (in Fahrtrichtung, rechts = +):
+   gW am Wendepunkt = Versatz des Drehpunkts (Rutschen, Mechanik),
+   gS am Startpunkt = gW + L·sin(Fehler). Zu weit gedreht um e:
+   rechts → Rücklinie läuft nach links (gS-gW < 0), links → nach rechts. */
+const TF_LEN_MM = 200;
+function turnTestEval() {
+  const c = st.cfg, dir = $('tfDir').value, gW = +$('tfGapW').value || 0, gS = +$('tfGapS').value || 0;
+  const q = Math.max(-1, Math.min(1, (gS - gW) / TF_LEN_MM));
+  const over = (dir === 'r' ? -1 : 1) * Math.asin(q) * 180 / Math.PI;     // + = zu weit gedreht
+  const old = (dir === 'r' ? c.tr : c.tl) / 1000, f = old * 360 / (360 + over);
+  return { dir, gW, over, old, f };
 }
 function updateTurnFactors() {
-  const c = st.cfg, { fr, fl } = turnFactorsNew();
-  const ok = x => isFinite(x) && x >= 0.8 && x <= 1.25;
-  $('tfOut').textContent = `Jetzt: rechts ${(c.tr / 1000).toFixed(3)}, links ${(c.tl / 1000).toFixed(3)} → neu: rechts ${ok(fr) ? fr.toFixed(3) : '–'}, links ${ok(fl) ? fl.toFixed(3) : '–'}` +
-    `  ·  global.h: #define TURN_FACTOR_RIGHT ${ok(fr) ? fr.toFixed(3) : '…'} / #define TURN_FACTOR_LEFT ${ok(fl) ? fl.toFixed(3) : '…'}`;
-  $('tfSet').disabled = !st.connected || !ok(fr) || !ok(fl);
+  const c = st.cfg, r = turnTestEval(), ok = isFinite(r.f) && r.f >= 0.8 && r.f <= 1.25;
+  const nm = r.dir === 'r' ? 'Rechtsdrehung' : 'Linksdrehung';
+  const ow = Math.abs(r.over) < 0.05 ? 'genau 360°' : `${(360 + r.over).toFixed(1)}° (${r.over > 0 ? 'zu weit' : 'zu kurz'})`;
+  $('tfOut').innerHTML = `Jetzt: rechts ${(c.tr / 1000).toFixed(3)}, links ${(c.tl / 1000).toFixed(3)}.<br>` +
+    `${nm}: gedreht ${ow} → neuer Faktor <b>${ok ? r.f.toFixed(3) : '–'}</b>` +
+    (Math.abs(r.gW) >= 1 ? `<br>Drehpunkt um ${Math.abs(r.gW).toFixed(1)} mm verrutscht – das ist kein Winkelfehler, sondern Rutschen (siehe Anleitung: Räder, Stiftdruck, Stützrad).` : '') +
+    `<br>global.h: <code>#define TURN_FACTOR_${r.dir === 'r' ? 'RIGHT' : 'LEFT'} ${ok ? r.f.toFixed(3) : '…'}</code>`;
+  $('tfSet').disabled = !st.connected || !ok || Math.abs(r.over) < 0.05;
+}
+async function runTurnTest(dir) {
+  if (!st.connected || !(await armedIn8())) return;
+  $('tfDir').value = dir; updateTurnFactors();
+  const step = async (cmd, ms) => { const p = expect(/^@DONE/, ms); sendText(cmd); await p; await sleep(400); };
+  try {
+    sendText('SPEED 0'); await sleep(200);
+    sendText('PEN D'); await sleep(900);
+    await step('FWD ' + TF_LEN_MM / 10, 30000);
+    await step('TURN ' + (dir === 'r' ? 360 : -360), 60000);
+    await step('BACK ' + TF_LEN_MM / 10, 30000);
+    logLine('Drehtest fertig: Abstände messen und eintragen.');
+  } catch (e) { logLine('Drehtest: ' + e.message, 'err'); }
+  sendText('PEN U');
 }
 async function armedIn8() {
   if (!(await ensureMenu(8))) return false;
   if (st.armed) return true;
-  if (!(await confirmDialog('Fahren freigeben?', 'Der Roboter dreht sich gleich einmal ganz um sich selbst. Platz lassen.', 'Freigeben'))) return false;
+  if (!(await confirmDialog('Fahren freigeben?', 'Der Roboter fährt gleich 20 cm, dreht sich einmal ganz um sich selbst und fährt zurück. Platz lassen.', 'Freigeben'))) return false;
   sendText('ARM');
   try { await expect(/^@OK ARM/); return true; } catch (e) { logLine('Freigabe: ' + e.message, 'err'); return false; }
 }
@@ -1446,13 +1470,13 @@ function init() {
   const penMenu = async () => { if (st.menu === 0 || st.menu === 8) return true; return ensureMenu(0); };
   $('penSet').onclick = async () => { if (!st.connected || !(await penMenu())) return; sendText('SET PENUP ' + penAng('penUpIn')); await sleep(150); sendText('SET PENDOWN ' + penAng('penDownIn')); };
   $('penTestUp').onclick = async () => { if (st.connected && await penMenu()) sendText('PEN U'); };
-  ['tfMeasR', 'tfMeasL'].forEach(id => $(id).oninput = updateTurnFactors);
-  $('tfTestR').onclick = async () => { if (st.connected && await armedIn8()) sendText('TURN 360'); };
-  $('tfTestL').onclick = async () => { if (st.connected && await armedIn8()) sendText('TURN -360'); };
+  ['tfGapW', 'tfGapS', 'tfDir'].forEach(id => $(id).oninput = $(id).onchange = updateTurnFactors);
+  $('tfTestR').onclick = () => runTurnTest('r');
+  $('tfTestL').onclick = () => runTurnTest('l');
   $('tfSet').onclick = async () => {
-    const { fr, fl } = turnFactorsNew(); if (!st.connected) return;
-    sendText('SET TURNR ' + fr.toFixed(3)); await sleep(150); sendText('SET TURNL ' + fl.toFixed(3));
-    $('tfMeasR').value = 360; $('tfMeasL').value = 360;
+    const r = turnTestEval(); if (!st.connected) return;
+    sendText((r.dir === 'r' ? 'SET TURNR ' : 'SET TURNL ') + r.f.toFixed(3));
+    $('tfGapW').value = 0; $('tfGapS').value = 0;
   };
   $('penTestDown').onclick = async () => { if (st.connected && await penMenu()) sendText('PEN D'); };
   $('imgSend').onclick = sendImage;

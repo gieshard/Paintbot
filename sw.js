@@ -1,6 +1,6 @@
 // Netz zuerst, Zwischenspeicher nur als Rueckfall: so kommt nach jedem Update auf
 // GitHub Pages sofort die neue Fassung, und ohne Netz startet die App trotzdem.
-const CACHE = 'paintbot-v3';
+const CACHE = 'paintbot-v4';
 const FILES = ['./', './index.html', './app.js', './art-gen.js', './manifest.webmanifest', './icon.svg', './icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });

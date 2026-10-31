@@ -569,18 +569,19 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
           <button class="btn" id="btnCalDist">Raddurchmesser übernehmen</button>
         </div>
         <div class="card">
-          <h3>Links- und Rechtsdrehung getrennt</h3>
-          <p class="hint">Wenn Formen mit Links- <i>und</i> Rechtsdrehungen (Koch-Schneeflocke, Prüfquadrat) verzogen sind, ist eine Drehrichtung ungenau. Roboter auf eine Markierung stellen, 360° drehen lassen, echten Winkel ablesen.</p>
+          <h3>Drehtest mit Linie (links/rechts getrennt)</h3>
+          <p class="hint">Der Roboter zeichnet 20 cm vorwärts, dreht 360° und fährt mit Stift die 20 cm zurück. Dreht er genau 360°, liegt die Rücklinie auf der Hinlinie. Gemessen wird der Abstand der Rücklinie zur Hinlinie – in Fahrtrichtung gesehen: <b>rechts = plus</b>, <b>links = minus</b>.</p>
           <div class="row">
-            <button class="btn small" id="tfTestR">360° rechts drehen</button>
-            <label class="field">rechts gefahren (°)<input type="number" id="tfMeasR" value="360" min="200" max="500"></label>
+            <button class="btn small" id="tfTestR">Test rechts zeichnen</button>
+            <button class="btn small" id="tfTestL">Test links zeichnen</button>
+            <label class="field">Getestet<select id="tfDir"><option value="r">Rechtsdrehung</option><option value="l">Linksdrehung</option></select></label>
           </div>
           <div class="row">
-            <button class="btn small" id="tfTestL">360° links drehen</button>
-            <label class="field">links gefahren (°)<input type="number" id="tfMeasL" value="360" min="200" max="500"></label>
+            <label class="field">Abstand am Wendepunkt (mm)<input type="number" id="tfGapW" value="0" step="0.5" min="-50" max="50"></label>
+            <label class="field">Abstand am Startpunkt (mm)<input type="number" id="tfGapS" value="0" step="0.5" min="-80" max="80"></label>
           </div>
           <p class="hint" id="tfOut"></p>
-          <button class="btn" id="tfSet">Faktoren übernehmen</button>
+          <button class="btn" id="tfSet">Faktor übernehmen</button>
         </div>
         <div class="card">
           <h3>Stift einstellen</h3>
