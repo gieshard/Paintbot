@@ -1031,38 +1031,138 @@ function drawPathOn(cvs, pts, opts = {}) {
     g.stroke();
   }
   g.strokeStyle = css('--accent'); g.lineWidth = opts.lw || 2; g.lineJoin = 'round'; g.lineCap = 'round';
-  g.beginPath(); pts.forEach(([x, y], k) => { const [a, b] = P(x, y); k ? g.lineTo(a, b) : g.moveTo(a, b); }); g.stroke();
+  g.beginPath(); pts.forEach(([x, y, pen], k) => { const [a, b] = P(x, y); k && pen !== 0 ? g.lineTo(a, b) : g.moveTo(a, b); }); g.stroke();
+  if (pts.some((p, k) => k && p[2] === 0)) {   // Leerfahrten (Stift oben) gestrichelt
+    g.save(); g.globalAlpha = 0.45; g.setLineDash([3, 4]); g.lineWidth = 1; g.beginPath();
+    pts.forEach((p, k) => { if (k && p[2] === 0) { const [a, b] = P(pts[k - 1][0], pts[k - 1][1]), [c, d] = P(p[0], p[1]); g.moveTo(a, b); g.lineTo(c, d); } });
+    g.stroke(); g.restore();
+  }
   if (opts.robot) {   // Startposition und Blickrichtung
     const [a, b] = P(0, 0); g.fillStyle = css('--ok'); g.strokeStyle = css('--ok'); g.lineWidth = 2;
     g.beginPath(); g.arc(a, b, 4, 0, 7); g.fill();
     g.beginPath(); g.moveTo(a, b); g.lineTo(a + 22, b); g.lineTo(a + 16, b - 4); g.moveTo(a + 22, b); g.lineTo(a + 16, b + 4); g.stroke();
   }
 }
-/* Formen, die die App selbst erzeugt und als Zeichnung schickt (30.10.2026) */
+/* Formen, die die App selbst erzeugt und als Zeichnung schickt (30.10.2026),
+   Füllung (01.11.2026): parallele Linien oder Kontur nach innen als Spirale. */
 const APP_SHAPES = [
-  { key: 'circle', name: 'Kreis', label: 'Radius (mm)', def: 50 },
-  { key: 'square', name: 'Prüfquadrat', label: 'Seitenlänge (mm)', def: 100 },   // links herum, dann rechts herum
+  { key: 'circle', name: 'Kreis', label: 'Radius (mm)', def: 50, fill: true },
+  { key: 'rect', name: 'Quadrat', label: 'Seitenlänge (mm)', def: 100, fill: true },
+  { key: 'tri', name: 'Dreieck', label: 'Seitenlänge (mm)', def: 120, fill: true },
+  { key: 'star', name: 'Stern', label: 'Außenradius (mm)', def: 70, fill: true },
+  { key: 'square', name: 'Prüfquadrat', label: 'Seitenlänge (mm)', def: 100, fill: false },   // links herum, dann rechts herum
 ];
+const r1 = v => Math.round(v * 10) / 10;
 function circlePts(r) {   // Polygon mit ca. 3 mm Kantenlänge, gegen den Uhrzeigersinn, Start rechts
   const n = Math.max(24, Math.min(240, Math.ceil(2 * Math.PI * r / 3))), out = [];
-  for (let i = 0; i <= n; i++) { const a = i / n * 2 * Math.PI; out.push([Math.round(r * Math.cos(a) * 10) / 10, Math.round(r * Math.sin(a) * 10) / 10]); }
+  for (let i = 0; i <= n; i++) { const a = i / n * 2 * Math.PI; out.push([r1(r * Math.cos(a)), r1(r * Math.sin(a))]); }
   return out;
 }
-function shapeStroke(key, size) {
+// Umriss als geschlossener Linienzug (erster = letzter Punkt), gegen den Uhrzeigersinn,
+// Mittelpunkt (= Startpunkt des Roboters) bei 0,0
+function shapeOutline(key, size) {
   if (key === 'circle') return circlePts(size);
-  // Prüfquadrat: erst gegen den Uhrzeigersinn (nur Linksdrehungen), dann dasselbe
-  // Quadrat im Uhrzeigersinn (nur Rechtsdrehungen). Stimmen beide Drehrichtungen,
-  // liegen die Linien genau übereinander; sonst sieht man zwei verdrehte Quadrate.
-  const h = size / 2; return [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h], [-h, h], [h, h], [h, -h], [-h, -h]];
+  let v;
+  if (key === 'rect') { const h = size / 2; v = [[h, -h], [h, h], [-h, h], [-h, -h]]; }
+  else if (key === 'tri') { const H = size * Math.sqrt(3) / 2; v = [[-size / 2, -H / 3], [size / 2, -H / 3], [0, 2 * H / 3]]; }
+  else if (key === 'star') { v = []; for (let k = 0; k < 10; k++) { const a = (90 + 36 * k) * Math.PI / 180, r = k % 2 ? size * 0.382 : size; v.push([r * Math.cos(a), r * Math.sin(a)]); } }
+  else { const h = size / 2; return [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h], [-h, h], [h, h], [h, -h], [-h, -h]]; }  // Prüfquadrat
+  // Startpunkt dort, wo die Blickrichtung des Roboters (+x) den Umriss trifft
+  let best = null;
+  for (let k = 0; k < v.length; k++) {
+    const [ax, ay] = v[k], [bx, by] = v[(k + 1) % v.length];
+    if ((ay <= 0 && by > 0) || (by <= 0 && ay > 0)) { const x = ax + (0 - ay) / (by - ay) * (bx - ax); if (x > 0 && (!best || x > best.x)) best = { x, k }; }
+  }
+  const out = [[best.x, 0]];
+  for (let k = 1; k <= v.length; k++) out.push(v[(best.k + k) % v.length]);
+  out.push([best.x, 0]);
+  return out.map(([x, y]) => [r1(x), r1(y)]);
 }
-function shapePoints(key, size) { return shapeStroke(key, size).map((p, i) => ({ x: p[0], y: p[1], pen: i ? 1 : 0 })); }
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+  let t = L ? ((px - ax) * dx + (py - ay) * dy) / L : 0; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+function polyDist(px, py, poly) { let d = Infinity; for (let k = 1; k < poly.length; k++) d = Math.min(d, segDist(px, py, poly[k - 1][0], poly[k - 1][1], poly[k][0], poly[k][1])); return d; }
+function polyInside(px, py, poly) {
+  let c = false;
+  for (let k = 1; k < poly.length; k++) { const [ax, ay] = poly[k - 1], [bx, by] = poly[k]; if ((ay > py) !== (by > py) && px < ax + (py - ay) / (by - ay) * (bx - ax)) c = !c; }
+  return c;
+}
+// a) parallele Linien im Winkel ang (0° = parallel zur Grundlinie/Unterkante), Abstand gap
+function hatchFill(poly, gap, ang, from) {
+  const a = ang * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+  const q = poly.map(([x, y]) => [x * ca + y * sa, -x * sa + y * ca]);      // Linien werden waagerecht
+  const ys = q.map(p => p[1]), y0 = Math.min(...ys), y1 = Math.max(...ys), n = Math.max(1, Math.floor((y1 - y0) / gap));
+  const first = y0 + (y1 - y0 - (n - 1) * gap) / 2, segs = [];
+  for (let k = 0; k < n; k++) {
+    const y = first + k * gap, xs = [];
+    for (let e = 1; e < q.length; e++) { const [ax, ay] = q[e - 1], [bx, by] = q[e]; if ((ay <= y && by > y) || (by <= y && ay > y)) xs.push(ax + (y - ay) / (by - ay) * (bx - ax)); }
+    xs.sort((u, v) => u - v);
+    for (let m = 0; m + 1 < xs.length; m += 2) if (xs[m + 1] - xs[m] >= 1) segs.push([[xs[m], y], [xs[m + 1], y]]);
+  }
+  const back = ([x, y]) => [r1(x * ca - y * sa), r1(x * sa + y * ca)];
+  // Reihenfolge: immer das nächstgelegene Linienende als Nächstes (kurze Leerfahrten)
+  const out = []; let cur = from || [0, 0];
+  const left = segs.map(sg => sg.map(back));
+  while (left.length) {
+    let bi = 0, br = false, bd = Infinity;
+    left.forEach((sg, i) => { for (const r of [false, true]) { const p = r ? sg[1] : sg[0], d = Math.hypot(p[0] - cur[0], p[1] - cur[1]); if (d < bd) { bd = d; bi = i; br = r; } } });
+    const sg = left.splice(bi, 1)[0]; if (br) sg.reverse(); out.push(sg); cur = sg[1];
+  }
+  return out;
+}
+// b) Kontur nach innen: eine Spirale, deren Windungen dem Umriss im Abstand gap folgen.
+// Für jeden Strahl vom Mittelpunkt wird der Abstand zum Rand gemessen; Windung k liegt
+// dort, wo dieser Abstand k·gap beträgt. Funktioniert für Formen, die vom Mittelpunkt
+// aus ganz sichtbar sind (Kreis, Vieleck, Stern).
+function spiralFill(poly, gap, startLevel) {
+  let per = 0; for (let k = 1; k < poly.length; k++) per += Math.hypot(poly[k][0] - poly[k - 1][0], poly[k][1] - poly[k - 1][1]);
+  const N = Math.max(90, Math.min(360, Math.ceil(per / 2))), rmax = Math.max(...poly.map(p => Math.hypot(p[0], p[1]))) + 1;
+  const h = Math.max(0.25, rmax / 500), prof = [];
+  for (let i = 0; i < N; i++) {
+    const th = i / N * 2 * Math.PI, c = Math.cos(th), s = Math.sin(th), d = [];
+    for (let r = 0; r <= rmax; r += h) { if (r > 0 && !polyInside(r * c, r * s, poly)) break; d.push(polyDist(r * c, r * s, poly)); }
+    prof.push(d);
+  }
+  const dc = prof[0][0];
+  const R = (i, L) => {   // äußerster Radius auf Strahl i mit Randabstand >= L
+    const d = prof[((i % N) + N) % N];
+    for (let j = d.length - 1; j >= 0; j--) if (d[j] >= L) { if (j === d.length - 1) return j * h; const t = (d[j] - L) / (d[j] - d[j + 1]); return (j + t) * h; }
+    return 0;
+  };
+  const RL = (phi, L) => { const u = phi / (2 * Math.PI) * N, i = Math.floor(u), f = u - i; return R(i, L) * (1 - f) + R(i + 1, L) * f; };
+  const Phi = 2 * Math.PI * (dc - startLevel) / gap; if (Phi <= 0) return [];
+  const pts = []; let phi = 0;
+  while (true) {
+    const L = startLevel + phi / (2 * Math.PI) * gap, r = RL(phi, L);
+    pts.push([r * Math.cos(phi), r * Math.sin(phi)]);
+    if (phi >= Phi) break;
+    phi = Math.min(Phi, phi + Math.max(0.002, Math.min(2 * Math.PI / N, 1 / Math.max(r, 1))));   // ca. 1 mm
+  }
+  return [rdp(pts, 0.2).map(([x, y]) => [r1(x), r1(y)])];
+}
+function shapeOpts() {
+  return { fill: $('shapeFill').value, gap: Math.max(1, Math.min(50, +$('shapeGap').value || 5)), ang: +$('shapeAng').value || 0, outline: $('shapeOutline').checked };
+}
+// Liste von Linienzügen; zwischen ihnen fährt der Roboter mit Stift oben
+function shapeStrokes(key, size, o = { fill: 'none', outline: true }) {
+  const app = APP_SHAPES.find(a => a.key === key), poly = shapeOutline(key, size);
+  if (!app.fill || o.fill === 'none') return [poly];
+  const strokes = o.outline ? [poly] : [];
+  if (o.fill === 'hatch') strokes.push(...hatchFill(poly, o.gap, o.ang, o.outline ? poly[poly.length - 1] : [0, 0]));
+  else strokes.push(...spiralFill(poly, o.gap, o.outline ? 0 : o.gap / 2));
+  return strokes.filter(s => s.length >= 2);
+}
+function shapeStroke(key, size, o) { return shapeStrokes(key, size, o).flatMap(s => s.map((p, i) => [p[0], p[1], i ? 1 : 0])); }
+function shapePoints(key, size, o) { return shapeStroke(key, size, o).map(([x, y, pen]) => ({ x, y, pen })); }
 function patSel() { return typeof st.pat === 'string' ? APP_SHAPES.find(a => a.key === st.pat) : null; }
 
 function renderPatterns() {
   const box = $('patThumbs'); if (!box) return;
   if (!box.dataset.built) {
     box.innerHTML = PATTERNS.map((p, i) => `<button class="thumb" data-pat="${i}"><canvas></canvas><span>${p.name}</span><small>${p.pts.length} Strecken · im Roboter</small></button>`).join('') +
-      APP_SHAPES.map(a => `<button class="thumb" data-pat="${a.key}"><canvas></canvas><span>${a.name}</span><small>Größe wählbar · aus der App</small></button>`).join('');
+      APP_SHAPES.map(a => `<button class="thumb" data-pat="${a.key}"><canvas></canvas><span>${a.name}</span><small>${a.fill ? 'Größe wählbar · füllbar' : 'Größe wählbar · Drehtest'}</small></button>`).join('');
     box.dataset.built = '1';
     box.onclick = async ev => {
       const b = ev.target.closest('[data-pat]'); if (!b) return;
@@ -1085,16 +1185,22 @@ function renderPatterns() {
   if (app) {
     const size = Math.max(10, Math.min(250, +$('shapeSize').value || app.def));
     $('shapeLbl').textContent = app.label;
-    const stroke = shapeStroke(app.key, size), pts = shapePoints(app.key, size), plan = planRobot(pts, st.cfg);
+    $('shapeFillCtl').hidden = !app.fill;
+    const o = app.fill ? shapeOpts() : { fill: 'none', outline: true };
+    $('shapeGapF').hidden = o.fill === 'none'; $('shapeAngF').hidden = o.fill !== 'hatch'; $('shapeOutlineF').hidden = o.fill === 'none';
+    const stroke = shapeStroke(app.key, size, o), pts = stroke.map(([x, y, pen]) => ({ x, y, pen })), plan = planRobot(pts, st.cfg);
     drawPathOn($('patCv'), stroke, { grid: true, robot: true });
-    // Roboter-Startpunkt = Mitte der Form
-    const L = app.key === 'circle' ? 2 * Math.PI * size : 8 * size;
-    $('patTitle').textContent = app.name;
-    $('patStats').innerHTML = [[app.key === 'circle' ? 'Durchmesser' : 'Seite', app.key === 'circle' ? (2 * size) + ' mm' : size + ' mm'],
-      ['Linie', (L / 10).toFixed(1) + ' cm'], ['Punkte', pts.length], ['Dauer ca.', fmtTime(plan.total)], ['Start', 'Mitte der Form']]
+    let L = 0, T = 0;
+    for (let k = 1; k < stroke.length; k++) { const d = Math.hypot(stroke[k][0] - stroke[k - 1][0], stroke[k][1] - stroke[k - 1][1]); if (stroke[k][2]) L += d; else T += d; }
+    const xs = stroke.map(p => p[0]), ys = stroke.map(p => p[1]);
+    $('patTitle').textContent = app.name + (o.fill === 'hatch' ? ' – Linienfüllung' : o.fill === 'spiral' ? ' – Spiralfüllung' : '');
+    const tooMany = pts.length > st.cfg.pmax;
+    $('patStats').innerHTML = [['Größe', `${Math.round(Math.max(...xs) - Math.min(...xs))} × ${Math.round(Math.max(...ys) - Math.min(...ys))} mm`],
+      ['Linie', (L / 10).toFixed(1) + ' cm'], ['Leerfahrt', (T / 10).toFixed(1) + ' cm'], ['Punkte', tooMany ? `<b style="color:var(--stop)">${pts.length} (max. ${st.cfg.pmax})</b>` : pts.length],
+      ['Dauer ca.', fmtTime(plan.total)], ['Start', 'Mitte der Form']]
       .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
     st.shapeCur = { pts, plan };
-    $('shapeSend').disabled = st.sending;
+    $('shapeSend').disabled = st.sending || tooMany;
     return;
   }
   const pts = patternPath(st.pat);
@@ -1464,6 +1570,13 @@ function init() {
   ['imgMode', 'imgThr', 'imgLevels', 'imgSpacing', 'imgDetail', 'imgMin', 'imgInvert', 'imgPaper', 'imgSize'].forEach(id => $(id).addEventListener('input', () => { imgLabels(); clearTimeout(imgSt.t); imgSt.t = setTimeout(convertImage, 120); }));
   $('imgShowSrc').onchange = renderImg;
   $('shapeSize').oninput = () => { const a = patSel(); if (a) store('shape.' + a.key, +$('shapeSize').value); renderPatterns(); };
+  // Füllung (01.11.2026): Einstellungen gelten für alle Formen und bleiben gespeichert
+  $('shapeFill').value = load('shape.fill', 'none'); $('shapeGap').value = load('shape.gap', 5);
+  $('shapeAng').value = load('shape.ang', 0); $('shapeOutline').checked = load('shape.outline', true);
+  ['shapeFill', 'shapeGap', 'shapeAng', 'shapeOutline'].forEach(id => $(id).oninput = $(id).onchange = () => {
+    store('shape.fill', $('shapeFill').value); store('shape.gap', +$('shapeGap').value);
+    store('shape.ang', +$('shapeAng').value); store('shape.outline', $('shapeOutline').checked); renderPatterns();
+  });
   $('shapeSend').onclick = sendShape;
   // Einstellungen: Stift
   const penAng = id => Math.max(0, Math.min(180, Math.round(+$(id).value || 0)));
