@@ -44,7 +44,7 @@ const PATTERNS = [
 const PAPERS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594] };
 const SPEED_NAMES = ['Langsam', 'Mittel', 'Schnell'];
 const DEFAULT_CFG = {
-  wheel: 63.0, track: 142.5, spr: 500, spt: 1131, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
+  wheel: 60.0, track: 176.4, spr: 500, spt: 1470, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
   prof: [{ v: 150, a: 250 }, { v: 280, a: 350 }, { v: 420, a: 450 }],
   art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000
 };
