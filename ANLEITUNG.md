@@ -7,8 +7,8 @@ GitHub Pages abgelegt.
 
 ## Voraussetzungen
 
-- Firmware **V13** auf dem Roboter (mit `AppControl.ino`, Menü 8). Ältere Firmware
-  versteht die Tasten der App, aber keine Fahrbefehle und keine Zeichnungen.
+- Firmware **V16** auf dem Roboter. Ältere Firmware versteht die Tasten der App, aber
+  nicht die direkte Muster- und Kunstauswahl und kein Bild in Menü 2.
 - Browser:
 
   | Gerät | Browser |
@@ -28,7 +28,7 @@ GitHub Pages abgelegt.
    **Create repository**.
 3. Auf der neuen Seite **uploading an existing file** anklicken und alle Dateien
    aus diesem Ordner hineinziehen:
-   `index.html`, `app.js`, `manifest.webmanifest`, `sw.js`, `icon.svg`,
+   `index.html`, `app.js`, `art-gen.js`, `manifest.webmanifest`, `sw.js`, `icon.svg`,
    `icon-192.png`, `icon-512.png` (`README.md` und diese Anleitung können mit). **Commit changes**.
 4. **Settings → Pages**. Unter *Build and deployment*: Source **Deploy from a
    branch**, Branch **main**, Ordner **/ (root)**, **Save**.
@@ -46,29 +46,96 @@ Dateien hineinziehen, *Commit*. Nach kurzer Zeit lädt die App die neue Fassung.
 
 ## Bedienung
 
-1. Roboter einschalten, oben **Verbinden** → in der Liste den Roboter wählen.
-   Ohne Roboter: **Demo** (simuliert alles, nichts wird wirklich gefahren).
-2. **Tasten** – genau wie die Bluefruit-App, inklusive langem Druck.
-   Rechts steht, was jede Taste im aktuellen Menü tut. Darunter jedes Menü direkt
-   anwählen. Am PC: Pfeiltasten, 1–4, **Leertaste = Stop**.
-3. **Fahren** – nur in **Menü 8 (App-Steuerung)**. Die App bietet den Wechsel an.
-   Danach **Fahren freigeben** und Strecken (cm) oder Drehungen (Grad) senden.
-4. **Zeichnen**
-   - Blattformat wählen, mit Maus oder Finger zeichnen: Freihand, Linienzug
-     (antippen, „Linienzug fertig“ oder Doppelklick), Rechteck, Kreis, Vorlagen.
-   - **Pfad-Vorschau**: blau = Linie mit Stift unten, orange gestrichelt =
-     Leerfahrt mit Stift oben, Punkte = Drehungen. *Abspielen* zeigt den
-     Ablauf im Zeitraffer, der Schieberegler springt an jede Stelle. Dauer,
-     Linienlänge und Leerfahrten stehen daneben.
-   - **An Roboter senden**: überträgt die Zeichnung, fragt dann nach. Blatt quer
-     legen, Roboter mit dem Stift auf die Blattmitte, Blick nach rechts (lange
-     Kante), *Freigeben und zeichnen*. Während er zeichnet, zeigt die App seine
-     Position live (grüner Kreis).
-   - Die Zeichnung bleibt im Browser gespeichert.
-5. **Kalibrieren** – 90° drehen lassen, echten Winkel eintragen → *Spurweite
-   übernehmen*. Genauso für 100 cm Strecke → *Raddurchmesser übernehmen*.
-   Gilt bis zum Neustart; die Zeilen für `global.h` stehen daneben.
-6. **Stop** (oben rechts, Leertaste) hält immer sofort an.
+Oben steht die **Menüleiste** mit allen Menüs des Roboters (0 Leerlauf bis 8 App-Fahren).
+Antippen öffnet die Seite des Menüs und schaltet den Roboter dorthin. Der grüne Punkt
+zeigt, in welchem Menü der Roboter wirklich ist; wechselt er selbst (Taste 4 am Roboter,
+Stop), geht die App mit. **Stop** (oben rechts, Leertaste) hält immer sofort an.
+
+1. Roboter einschalten, **Verbinden** → Roboter wählen. Ohne Roboter: **Demo**.
+2. **Menü 0 Leerlauf** – Bluefruit-Tasten (wie die Bluefruit-App, inkl. langem Druck)
+   und Infos: Firmware, Räder, Akkus.
+3. **Menü 1 Fernsteuerung** – Steuerkreuz freigeben, Richtung antippen = fahren,
+   nochmal = anhalten; Tempo wechseln.
+4. **Menü 2 Muster**
+   - *Gespeicherte Muster*: Vorschau antippen wählt das Muster im Roboter.
+     *Starten / abbrechen*. Gezeichnet wird ab der Stelle, an der der Roboter steht.
+   - *Bild hochladen*: JPG/PNG wählen, Verfahren einstellen (siehe unten), Ergebnis
+     prüfen, *Bild zeichnen lassen*. Roboter mit dem Stift auf die Blattmitte, Blick
+     nach rechts.
+   - *Formen aus der App*: **Kreis**, **Quadrat**, **Dreieck**, **Stern** (Größe wählbar,
+     füllbar) und **Prüfquadrat** (Seitenlänge wählbar).
+     *Füllung*: **parallele Linien** (Linienabstand, Standard 5 mm, und Winkel zur
+     Grundlinie: 0° = parallel zur Unterkante) oder **Kontur nach innen** – eine Spirale,
+     deren Windungen dem Umriss im Linienabstand nach innen folgen. *Umriss zeichnen*
+     an/aus. Die Vorschau zeigt Leerfahrten gestrichelt; mehr als 1500 Punkte (sehr
+     kleiner Abstand bei großen Formen) lassen sich nicht senden. Der Kreis startet rechts außen und läuft links herum. Das Prüfquadrat
+     fährt erst links herum (nur Linksdrehungen), dann dasselbe Quadrat rechts herum
+     (nur Rechtsdrehungen): liegen beide genau übereinander, stimmen beide
+     Drehrichtungen.
+5. **Menü 3 Zufallsfahrt**, **Menü 4 Driftkorrektur**, **Menü 6 Hardwaretest** –
+   die Funktionen als Knöpfe. Was fährt, fragt vorher nach.
+6. **Menü 7 Kunst** – alle Algorithmen mit kleiner Vorschau. Antippen, Seed und Blatt
+   wählen: die App stellt den Roboter genauso ein. *Seed vom Sensor* würfelt im
+   Roboter mit dem Entfernungsmesser. *Zeichnen / abbrechen*.
+7. **Menü 8 App-Fahren** – *Fahrbefehle* (Strecken in cm, Drehungen in Grad, Stift,
+   Tempo; vorher *Fahren freigeben*) und *Zeichnen* (Freihand, Linienzug, Rechteck,
+   Kreis, Vorlagen, Pfad-Vorschau mit Abspielen, *An Roboter senden*).
+8. **Einstellungen** – Kalibrieren (Spurweite aus gemessenem Drehwinkel,
+   Raddurchmesser aus gemessener Strecke), **Drehtest mit Linie** (siehe unten), **Stift einstellen** (Winkel für oben/unten, *Test oben/unten*)
+   und Hell/Dunkel. Alle Werte gelten bis zum Neustart; die passenden Zeilen für
+   `global.h` stehen jeweils darunter.
+
+### Bild in Linien umwandeln
+
+Die App verkleinert das Bild auf höchstens 360 Pixel, rechnet es in Graustufen um,
+glättet es leicht und streckt den Kontrast. Dann gibt es drei Verfahren:
+
+| Verfahren | Ergebnis | gut für |
+|---|---|---|
+| **Umriss** | Konturen der dunklen Flächen bei einer Schwelle (Startwert automatisch) | Logos, Silhouetten, Strichzeichnungen |
+| **Höhenlinien** | Konturen bei 2–5 Helligkeitsstufen, wie auf einer Landkarte | Porträts, Fotos mit Verläufen |
+| **Schraffur** | parallele Linien, je dunkler desto mehr Lagen (45°, −45°, 0°, 90°) | Fotos, Flächen; wenige lange Striche |
+
+Danach: aufs Blatt einpassen (*Größe*), Linien vereinfachen (*Vereinfachen*: größer =
+weniger Punkte), kurze Schnipsel weglassen (*Kürzeste Linie*), Reihenfolge so legen,
+dass die Leerfahrten kurz werden. Der Roboter speichert höchstens 1500 Punkte – die
+App warnt vorher. *Hell und dunkel tauschen* hilft bei hellen Motiven auf dunklem Grund.
+
+### Einmessen in drei Schritten (Einstellungen)
+
+Reihenfolge einhalten – jeder Schritt baut auf dem vorigen auf. Jede Testfahrt schaltet
+den Roboter auf Menü 8, fragt nach der Freigabe und fährt langsam.
+
+1. **Strecke korrigieren** – *Testfahrt zeichnen*: 10 cm mit Stift, danach 10 cm mit
+   gehobenem Stift weiter, damit der Roboter aus dem Weg ist. Strichlänge messen,
+   eintragen, *Raddurchmesser übernehmen*.
+2. **Geradeauslauf** – *Testlinie zeichnen* (Standard 40 cm). Lineal an Anfang und Ende
+   des Strichs anlegen, in der Mitte den Abstand Strich–Lineal messen und angeben, ob der
+   Roboter eine Links- oder Rechtskurve gefahren ist (in Fahrtrichtung gesehen).
+   *Ausgleich übernehmen*, Test wiederholen, bis die Linie gerade ist.
+3. **Drehtest mit Linie** – siehe unten.
+
+Bei „Nicht übernommen: …“ im Protokoll war der Roboter noch beschäftigt oder nicht
+verbunden; die App hält ihn bei „busy“ automatisch an und versucht es noch einmal.
+
+### Drehtest mit Linie (Links- und Rechtsdrehung abgleichen)
+
+*Test rechts zeichnen*: Der Roboter zeichnet 20 cm vorwärts, dreht 360° rechts herum
+und fährt mit Stift 20 cm zurück. Dann mit dem Lineal messen, wie weit die Rücklinie
+neben der Hinlinie liegt – in Fahrtrichtung (vom Start zum Wendepunkt) gesehen –
+und wähle daneben *rechts* oder *links*.
+
+- *Abstand am Wendepunkt*: direkt nach der Drehung. Ist er nicht 0, ist der Roboter
+  beim Drehen **verrutscht** – das ist Mechanik, kein Winkelfehler.
+- *Abstand am Startpunkt*: Die App rechnet aus dem Unterschied zum Wendepunkt den
+  echten Drehwinkel und den neuen Faktor. *Faktor übernehmen*, Test wiederholen, bis
+  die Linien übereinander liegen. Dann den Wert in `global.h` eintragen.
+
+Streuen die Werte von Versuch zu Versuch stark, rutscht etwas. Prüfen: Madenschrauben
+der Räder fest auf der Motorwelle (ein Rad, das nur in einer Richtung durchrutscht,
+macht genau einen Fehler in einer Drehrichtung), Gummi auf den Rädern und sauber,
+Stützrad/-kugel leichtgängig, Stift nur aufliegend (Winkel *Unten* etwas höher),
+glattes Fotopapier vermeiden.
 
 ## Wenn etwas nicht geht
 
@@ -78,5 +145,7 @@ Dateien hineinziehen, *Commit*. Nach kurzer Zeit lädt die App die neue Fassung.
   oder die Seite wurde nicht über https geöffnet.
 - **Fahrbefehle werden abgelehnt:** Statusleiste prüfen – Menü 8 und *Fahren: frei*
   müssen stehen. Ein Menüwechsel sperrt automatisch.
+- **Menü 5 fehlt:** Absicht. Der Distanz-Monitor ist entfallen; dieselbe Messung gibt es
+  im Hardwaretest (Menü 6).
 - **Im Protokoll fehlen Zeilen:** Haken *Maschinenzeilen* zeigt auch die
   Statusmeldungen der Firmware (`@STAT`, `@PROG` …).

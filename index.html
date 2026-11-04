@@ -570,25 +570,44 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
         </div>
         <div class="card">
           <h3>Strecke korrigieren</h3>
-          <p class="hint">Zuerst prüfen: 100 cm vor fahren lassen und mit dem Maßband messen.</p>
+          <p class="hint"><b>Testfahrt:</b> Der Roboter zeichnet eine Linie (Stift unten) und fährt dann mit gehobenem Stift noch einmal so weit, damit du die Linie frei messen kannst. Gemessen wird die Länge des Strichs.</p>
           <div class="row">
-            <label class="field">befohlen (cm)<input type="number" id="calDistCmd" value="100"></label>
-            <label class="field">gefahren (cm)<input type="number" id="calDistAct" value="100"></label>
+            <button class="btn small" id="calDistTest">Testfahrt zeichnen</button>
+            <label class="field">befohlen (cm)<input type="number" id="calDistCmd" value="10" min="5" max="50" step="1"></label>
+            <label class="field">gezeichnet (cm)<input type="number" id="calDistAct" value="10" step="0.05" inputmode="decimal"></label>
           </div>
           <p class="hint" id="calDistOut"></p>
           <button class="btn" id="btnCalDist">Raddurchmesser übernehmen</button>
         </div>
         <div class="card">
+          <h3>Geradeauslauf (Kurve ausgleichen)</h3>
+          <p class="hint">Der Roboter zeichnet eine gerade Linie. Lineal an Anfang und Ende der Linie anlegen und in der Mitte messen, wie weit die Linie vom Lineal weg ist. Dazu angeben, in welche Richtung der Roboter abgebogen ist (in Fahrtrichtung gesehen).</p>
+          <div class="row">
+            <button class="btn small" id="trTest">Testlinie zeichnen</button>
+            <label class="field">Länge (cm)<input type="number" id="trLen" value="40" min="10" max="100" step="5"></label>
+          </div>
+          <div class="row">
+            <label class="field">Roboter fährt<select id="trDir"><option value="l">Linkskurve</option><option value="r">Rechtskurve</option></select></label>
+            <label class="field">Abstand in der Mitte (mm)<input type="number" id="trSag" value="0" min="0" max="50" step="0.5" inputmode="decimal"></label>
+          </div>
+          <p class="hint" id="trOut"></p>
+          <button class="btn" id="trSet">Ausgleich übernehmen</button>
+        </div>
+        <div class="card">
           <h3>Drehtest mit Linie (links/rechts getrennt)</h3>
-          <p class="hint">Der Roboter zeichnet 20 cm vorwärts, dreht 360° und fährt mit Stift die 20 cm zurück. Dreht er genau 360°, liegt die Rücklinie auf der Hinlinie. Gemessen wird der Abstand der Rücklinie zur Hinlinie – in Fahrtrichtung gesehen: <b>rechts = plus</b>, <b>links = minus</b>.</p>
+          <p class="hint">Der Roboter zeichnet 20 cm vorwärts, dreht 360° und fährt mit Stift die 20 cm zurück. Dreht er genau 360°, liegt die Rücklinie auf der Hinlinie. Gemessen wird, wie weit die Rücklinie neben der Hinlinie liegt – in Fahrtrichtung (vom Start zum Wendepunkt) gesehen rechts oder links. Erst Geradeauslauf einstellen, dann diesen Test.</p>
           <div class="row">
             <button class="btn small" id="tfTestR">Test rechts zeichnen</button>
             <button class="btn small" id="tfTestL">Test links zeichnen</button>
             <label class="field">Getestet<select id="tfDir"><option value="r">Rechtsdrehung</option><option value="l">Linksdrehung</option></select></label>
           </div>
           <div class="row">
-            <label class="field">Abstand am Wendepunkt (mm)<input type="number" id="tfGapW" value="0" step="0.5" min="-50" max="50"></label>
-            <label class="field">Abstand am Startpunkt (mm)<input type="number" id="tfGapS" value="0" step="0.5" min="-80" max="80"></label>
+            <label class="field">Abstand am Wendepunkt (mm)<input type="number" id="tfGapW" value="0" step="0.5" min="0" max="50" inputmode="decimal"></label>
+            <label class="field">liegt<select id="tfSideW"><option value="r">rechts</option><option value="l">links</option></select></label>
+          </div>
+          <div class="row">
+            <label class="field">Abstand am Startpunkt (mm)<input type="number" id="tfGapS" value="0" step="0.5" min="0" max="80" inputmode="decimal"></label>
+            <label class="field">liegt<select id="tfSideS"><option value="r">rechts</option><option value="l">links</option></select></label>
           </div>
           <p class="hint" id="tfOut"></p>
           <button class="btn" id="tfSet">Faktor übernehmen</button>
