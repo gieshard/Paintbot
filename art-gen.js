@@ -10,7 +10,7 @@ const ArtGen = (() => {
   // Konstanten aus global.h
   const CFG = {
     margin: 20, minSeg: 1.0, returnHome: true, trackMm: 176.4,
-    wheelMm: 60.0, stepsPerRev: 500, penMoveSec: 0.3,
+    wheelMm: 60.0, stepsPerRev: 400, penMoveSec: 0.3,
     profiles: [{ name: "Langsam", acc: 250, max: 150 }, { name: "Mittel", acc: 350, max: 280 }, { name: "Schnell", acc: 450, max: 420 }],
     lineProfile: 0, turnProfile: 0,
   };

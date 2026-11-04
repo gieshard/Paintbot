@@ -44,9 +44,9 @@ const PATTERNS = [
 const PAPERS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594] };
 const SPEED_NAMES = ['Langsam', 'Mittel', 'Schnell'];
 const DEFAULT_CFG = {
-  wheel: 60.0, track: 176.4, spr: 500, spt: 1470, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
+  wheel: 60.0, track: 176.4, spr: 400, spt: 1176, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
   prof: [{ v: 150, a: 250 }, { v: 280, a: 350 }, { v: 420, a: 450 }],
-  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000, tm: 0
+  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000, tm: 0, wl: 1000, wr: 1000
 };
 const MIN_SEG_MM = 1.0;
 
@@ -168,7 +168,7 @@ class DemoLink {
   }
   cfgLine() {
     const c = this.s.cfg;
-    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm}`);
+    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm} wl=${c.wl} wr=${c.wr}`);
   }
   canDrive() {
     const s = this.s;
@@ -227,6 +227,8 @@ class DemoLink {
         else if (/^turnl$/i.test(k) && x >= 0.8 && x <= 1.25) c.tl = Math.round(x * 1000);
         else if (/^turnr$/i.test(k) && x >= 0.8 && x <= 1.25) c.tr = Math.round(x * 1000);
         else if (/^trim$/i.test(k) && x >= -0.05 && x <= 0.05) c.tm = Math.round(x * 10000);
+        else if (/^wsl$/i.test(k) && x >= 0.5 && x <= 1.5) c.wl = Math.round(x * 1000);
+        else if (/^wsr$/i.test(k) && x >= 0.5 && x <= 1.5) c.wr = Math.round(x * 1000);
         else { this.say('@ERR arg SET TRACK mm | SET WHEEL mm'); break; }
         this.say('Wert gilt bis zum Neustart -- dauerhaft in global.h eintragen.'); this.say('@OK SET'); this.cfgLine(); break;
       }
@@ -318,7 +320,7 @@ function handleLine(line) {
     case '@CFG': {
       const o = parseKV(rest), c = st.cfg;
       st.cfgHas = new Set(Object.keys(o));
-      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr', 'tm']) if (o[k] !== undefined) c[k] = +o[k];
+      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr', 'tm', 'wl', 'wr']) if (o[k] !== undefined) c[k] = +o[k];
       if (o.mode) c.mode = o.mode;
       if (o.prof) c.prof = o.prof.split(',').map(t => { const [v, a] = t.split('/'); return { v: +v, a: +a }; });
       if (o.art) c.art = o.art.split(',').map(Number);
@@ -425,7 +427,7 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
-const APP_VERSION = 'V16e-2 (05.11.2026)';
+const APP_VERSION = 'V16f (05.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [
@@ -435,12 +437,13 @@ function renderCfg() {
     ['Weg pro Schritt', mm.toFixed(3) + ' mm'],
     ...c.prof.map((p, i) => [SPEED_NAMES[i], (p.v * mm / 10).toFixed(1) + ' cm/s']),
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}`;
+  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}\n#define WHEEL_SCALE_LEFT  ${((c.wl || 1000) / 1000).toFixed(3)}\n#define WHEEL_SCALE_RIGHT ${((c.wr || 1000) / 1000).toFixed(3)}`;
   if (document.activeElement !== $('penUpIn')) $('penUpIn').value = c.pu;
   if (document.activeElement !== $('penDownIn')) $('penDownIn').value = c.pd;
   $('penLines').textContent = `penUpAngle = ${c.pu}; penDownAngle = ${c.pd};`;
   updateTurnFactors();
   updateTrim();
+  updateSpin();
   updateCal();
 }
 /* ---------- Testfahrten (V16c, 04.11.2026) ----------
@@ -485,6 +488,7 @@ async function runTestDrive(name, what, cmds, stId) {
   sendText('PEN U');
   if (obstOff) { await sleep(200); sendText('OBST 1'); }
   st.testRunning = false;
+  updateCal(); updateTurnFactors(); updateTrim(); updateSpin();
   return ok;
 }
 // Wert setzen und auf Bestätigung warten; "busy" → einmal STOP und nochmal versuchen
@@ -563,9 +567,24 @@ function updateTrim() {
 }
 /* Radtest (V16e): Roboter hochheben, ein Rad dreht genau n Umdrehungen. */
 async function runSpin(side) {
-  const n = 2;
+  const n = SPIN_TURNS;
   await runTestDrive('Radtest ' + (side === 'L' ? 'links' : 'rechts'),
     `Roboter HOCHHEBEN – das ${side === 'L' ? 'linke' : 'rechte'} Rad dreht genau ${n} Umdrehungen vorwärts.`, ['SPIN ' + side + ' ' + n], 'spinSt');
+}
+const SPIN_TURNS = 2;
+function spinEval() {
+  const c = st.cfg, ul = +$('spinCntL').value, ur = +$('spinCntR').value;
+  const ol = (c.wl || 1000) / 1000, or = (c.wr || 1000) / 1000;
+  const fl = ul > 0 ? ol * SPIN_TURNS / ul : NaN, fr = ur > 0 ? or * SPIN_TURNS / ur : NaN;
+  return { ol, or, fl, fr };
+}
+function updateSpin() {
+  const r = spinEval(), ok = x => isFinite(x) && x >= 0.5 && x <= 1.5;
+  const noFw = st.connected && st.cfgHas && !st.cfgHas.has('wl');
+  $('spinOut').innerHTML = `Jetzt: links ${r.ol.toFixed(3)}, rechts ${r.or.toFixed(3)} → neu: links <b>${ok(r.fl) ? r.fl.toFixed(3) : '–'}</b>, rechts <b>${ok(r.fr) ? r.fr.toFixed(3) : '–'}</b>` +
+    `<br>global.h: <code>#define WHEEL_SCALE_LEFT ${ok(r.fl) ? r.fl.toFixed(3) : '…'}</code> / <code>#define WHEEL_SCALE_RIGHT ${ok(r.fr) ? r.fr.toFixed(3) : '…'}</code>` +
+    (noFw ? '<br><b style="color:var(--stop)">Die Firmware auf dem Roboter kennt die Radfaktoren noch nicht – bitte V16f flashen.</b>' : '');
+  $('spinSet').disabled = !st.connected || !ok(r.fl) || !ok(r.fr) || noFw || st.testRunning;
 }
 async function runTrimTest() {
   const cm = Math.max(10, Math.min(100, +$('trLen').value || 40)); $('trLen').value = cm;
@@ -1748,6 +1767,11 @@ function init() {
   ['trLen', 'trSag', 'trDir'].forEach(id => $(id).oninput = $(id).onchange = updateTrim);
   $('trTest').onclick = runTrimTest;
   $('spinL').onclick = () => runSpin('L');
+  ['spinCntL', 'spinCntR'].forEach(id => $(id).oninput = updateSpin);
+  $('spinSet').onclick = async () => {
+    const r = spinEval();
+    if (await setValue('SET WSL ' + r.fl.toFixed(3), 'spinSt') && await setValue('SET WSR ' + r.fr.toFixed(3), 'spinSt')) { $('spinCntL').value = SPIN_TURNS; $('spinCntR').value = SPIN_TURNS; updateSpin(); }
+  };
   $('spinR').onclick = () => runSpin('R');
   $('trSet').onclick = async () => { const r = trimEval(); if (await setValue('SET TRIM ' + r.t.toFixed(4), 'trSt')) $('trSag').value = 0; };
   $('btnCopyCfg').onclick = () => {

@@ -594,11 +594,17 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
           </div>
           <p class="hint" id="trOut"></p>
           <p class="hint" id="trSt"></p>
-          <p class="hint"><b>Starke Kurve?</b> Dann ist meist ein Rad lose oder ein Motor verliert Schritte – das gleicht kein Ausgleich aus. Radtest: Roboter hochheben, Strich über Rad <i>und</i> Welle/Nabe malen, Test starten. Das Rad muss genau 2 ganze Umdrehungen machen und der Strich auf Rad und Welle muss danach noch fluchten.</p>
+          <p class="hint"><b>Radtest (vor allem bei starker Kurve):</b> Roboter hochheben, Strich über Rad <i>und</i> Welle/Nabe malen, Test starten. Das Rad soll genau 2 Umdrehungen machen. Gezählte Umdrehungen möglichst auf ¼ genau eintragen (z. B. 2.25) und die Radfaktoren übernehmen – danach Test wiederholen, bis beide Räder genau 2 Umdrehungen machen. Links/rechts = von hinten in Fahrtrichtung gesehen.</p>
           <div class="row">
             <button class="btn small" id="spinL">Radtest links</button>
             <button class="btn small" id="spinR">Radtest rechts</button>
           </div>
+          <div class="row">
+            <label class="field">gezählt links (U)<input type="number" id="spinCntL" value="2" min="0.5" max="5" step="0.05" inputmode="decimal"></label>
+            <label class="field">gezählt rechts (U)<input type="number" id="spinCntR" value="2" min="0.5" max="5" step="0.05" inputmode="decimal"></label>
+          </div>
+          <p class="hint" id="spinOut"></p>
+          <button class="btn" id="spinSet">Radfaktoren übernehmen</button>
           <p class="hint" id="spinSt"></p>
           <button class="btn" id="trSet">Ausgleich übernehmen</button>
         </div>
@@ -723,11 +729,11 @@ function pbBanner(t){ var d=document.getElementById('pbBanner'); if(!d){ d=docum
   d.onclick=function(){ d.remove(); }; document.body.appendChild(d); } d.textContent=t+' (Antippen schließt)'; }
 window.addEventListener('error', function(e){ pbBanner('Fehler in der App: '+e.message+(e.filename?' ('+e.filename.split('/').pop()+':'+e.lineno+')':'')); });
 </script>
-<script src="art-gen.js?v=16e2"></script>
-<script src="app.js?v=16e2"></script>
+<script src="art-gen.js?v=16f"></script>
+<script src="app.js?v=16f"></script>
 <script>
 /* Passen index.html und app.js zusammen? Sonst haben neue Knöpfe keine Funktion. */
-(function(){ var need='V16e', v; try { v = APP_VERSION; } catch (e) { v = null; }
+(function(){ var need='V16f', v; try { v = APP_VERSION; } catch (e) { v = null; }
   if (!v || v.indexOf(need) !== 0) pbBanner('app.js ist veraltet (geladen: '+(v||'alte Fassung')+', nötig: '+need+'). Bitte app.js auf GitHub hochladen und die Seite neu laden.'); })();
 </script>
 </body>
