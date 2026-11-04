@@ -194,6 +194,7 @@ class DemoLink {
     switch (w) {
       case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16d)'); this.cfgLine(); this.stat(); break;
       case 'OBST': this.say('@OK OBST'); break;
+      case 'SPIN': if (!this.canDrive()) break; s.move = { left: 2000 }; this.say('@OK SPIN'); break;
       case 'TELEM': s.tel = arg !== '0'; this.say('@OK TELEM'); break;
       case 'STAT': this.stat(); break;
       case 'CFG': this.cfgLine(); break;
@@ -424,7 +425,7 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
-const APP_VERSION = 'V16d-2 (05.11.2026)';
+const APP_VERSION = 'V16e (05.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [
@@ -559,6 +560,12 @@ function updateTrim() {
   const noFw = st.connected && st.cfgHas && !st.cfgHas.has('tm');
   if (noFw) $('trOut').innerHTML += '<br><b style="color:var(--stop)">Die Firmware auf dem Roboter kennt den Ausgleich noch nicht – bitte V16d flashen.</b>';
   $('trSet').disabled = !st.connected || !ok || r.s === 0 || st.testRunning || noFw;
+}
+/* Radtest (V16e): Roboter hochheben, ein Rad dreht genau n Umdrehungen. */
+async function runSpin(side) {
+  const n = 2;
+  await runTestDrive('Radtest ' + (side === 'L' ? 'links' : 'rechts'),
+    `Roboter HOCHHEBEN – das ${side === 'L' ? 'linke' : 'rechte'} Rad dreht genau ${n} Umdrehungen vorwärts.`, ['SPIN ' + side + ' ' + n], 'spinSt');
 }
 async function runTrimTest() {
   const cm = Math.max(10, Math.min(100, +$('trLen').value || 40)); $('trLen').value = cm;
@@ -1740,6 +1747,8 @@ function init() {
   $('calDistTest').onclick = runDistTest;
   ['trLen', 'trSag', 'trDir'].forEach(id => $(id).oninput = $(id).onchange = updateTrim);
   $('trTest').onclick = runTrimTest;
+  $('spinL').onclick = () => runSpin('L');
+  $('spinR').onclick = () => runSpin('R');
   $('trSet').onclick = async () => { const r = trimEval(); if (await setValue('SET TRIM ' + r.t.toFixed(4), 'trSt')) $('trSag').value = 0; };
   $('btnCopyCfg').onclick = () => {
     const t = $('cfgLines').textContent;
