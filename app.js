@@ -425,7 +425,7 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
-const APP_VERSION = 'V16e (05.11.2026)';
+const APP_VERSION = 'V16e-2 (05.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [

@@ -716,7 +716,19 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
   </div>
 </dialog>
 
-<script src="art-gen.js"></script>
-<script src="app.js"></script>
+<script>
+/* 05.11.2026: Fehler sichtbar machen (z. B. auf dem Handy ohne Entwicklerwerkzeuge) */
+function pbBanner(t){ var d=document.getElementById('pbBanner'); if(!d){ d=document.createElement('div'); d.id='pbBanner';
+  d.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#c62828;color:#fff;padding:10px 16px;font:14px/1.4 sans-serif';
+  d.onclick=function(){ d.remove(); }; document.body.appendChild(d); } d.textContent=t+' (Antippen schließt)'; }
+window.addEventListener('error', function(e){ pbBanner('Fehler in der App: '+e.message+(e.filename?' ('+e.filename.split('/').pop()+':'+e.lineno+')':'')); });
+</script>
+<script src="art-gen.js?v=16e2"></script>
+<script src="app.js?v=16e2"></script>
+<script>
+/* Passen index.html und app.js zusammen? Sonst haben neue Knöpfe keine Funktion. */
+(function(){ var need='V16e', v; try { v = APP_VERSION; } catch (e) { v = null; }
+  if (!v || v.indexOf(need) !== 0) pbBanner('app.js ist veraltet (geladen: '+(v||'alte Fassung')+', nötig: '+need+'). Bitte app.js auf GitHub hochladen und die Seite neu laden.'); })();
+</script>
 </body>
 </html>
