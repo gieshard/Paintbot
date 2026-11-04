@@ -46,7 +46,7 @@ const SPEED_NAMES = ['Langsam', 'Mittel', 'Schnell'];
 const DEFAULT_CFG = {
   wheel: 60.0, track: 176.4, spr: 500, spt: 1470, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
   prof: [{ v: 150, a: 250 }, { v: 280, a: 350 }, { v: 420, a: 450 }],
-  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000
+  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000, tm: 0
 };
 const MIN_SEG_MM = 1.0;
 
@@ -168,7 +168,7 @@ class DemoLink {
   }
   cfgLine() {
     const c = this.s.cfg;
-    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr}`);
+    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm}`);
   }
   canDrive() {
     const s = this.s;
@@ -192,7 +192,8 @@ class DemoLink {
       s.path.push(...pts); this.say('@PATH ' + s.path.length); return;
     }
     switch (w) {
-      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16)'); this.cfgLine(); this.stat(); break;
+      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16d)'); this.cfgLine(); this.stat(); break;
+      case 'OBST': this.say('@OK OBST'); break;
       case 'TELEM': s.tel = arg !== '0'; this.say('@OK TELEM'); break;
       case 'STAT': this.stat(); break;
       case 'CFG': this.cfgLine(); break;
@@ -224,6 +225,7 @@ class DemoLink {
         else if (/^pendown$/i.test(k) && x >= 0 && x <= 180) c.pd = Math.round(x);
         else if (/^turnl$/i.test(k) && x >= 0.8 && x <= 1.25) c.tl = Math.round(x * 1000);
         else if (/^turnr$/i.test(k) && x >= 0.8 && x <= 1.25) c.tr = Math.round(x * 1000);
+        else if (/^trim$/i.test(k) && x >= -0.05 && x <= 0.05) c.tm = Math.round(x * 10000);
         else { this.say('@ERR arg SET TRACK mm | SET WHEEL mm'); break; }
         this.say('Wert gilt bis zum Neustart -- dauerhaft in global.h eintragen.'); this.say('@OK SET'); this.cfgLine(); break;
       }
@@ -314,7 +316,8 @@ function handleLine(line) {
     }
     case '@CFG': {
       const o = parseKV(rest), c = st.cfg;
-      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr']) if (o[k] !== undefined) c[k] = +o[k];
+      st.cfgHas = new Set(Object.keys(o));
+      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr', 'tm']) if (o[k] !== undefined) c[k] = +o[k];
       if (o.mode) c.mode = o.mode;
       if (o.prof) c.prof = o.prof.split(',').map(t => { const [v, a] = t.split('/'); return { v: +v, a: +a }; });
       if (o.art) c.art = o.art.split(',').map(Number);
@@ -346,6 +349,8 @@ function onState(connected, name) {
   $('btnConnect').textContent = connected ? 'Trennen' : 'Verbinden';
   $('btnDemo').hidden = connected && !st.demo;
   $('btnDemo').textContent = connected && st.demo ? 'Demo beenden' : 'Demo';
+  if (!connected) st.testRunning = false;
+  updateCal(); updateTurnFactors(); updateTrim();
   renderStatus();
 }
 async function connect(demo) {
@@ -427,21 +432,80 @@ function renderCfg() {
     ['Weg pro Schritt', mm.toFixed(3) + ' mm'],
     ...c.prof.map((p, i) => [SPEED_NAMES[i], (p.v * mm / 10).toFixed(1) + ' cm/s']),
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}`;
+  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}`;
   if (document.activeElement !== $('penUpIn')) $('penUpIn').value = c.pu;
   if (document.activeElement !== $('penDownIn')) $('penDownIn').value = c.pd;
   $('penLines').textContent = `penUpAngle = ${c.pu}; penDownAngle = ${c.pd};`;
   updateTurnFactors();
+  updateTrim();
   updateCal();
 }
-/* Drehtest mit Linie (V16b). Hinlinie L mm, 360° drehen, Rücklinie L mm.
+/* ---------- Testfahrten (V16c, 04.11.2026) ----------
+   Gemeinsamer Ablauf: Menü 8, Freigabe, Tempo Langsam, dann Befehle nacheinander,
+   jeweils bis @DONE. Bei einem Fehler STOP, damit der Roboter nicht "beschäftigt"
+   hängen bleibt (sonst lehnt er danach SET … mit "busy" ab). */
+async function armedIn8(what) {
+  if (!(await ensureMenu(8))) return false;
+  if (st.armed) return true;
+  if (!(await confirmDialog('Fahren freigeben?', (what || 'Der Roboter fährt gleich los.') + ' Platz lassen.', 'Freigeben'))) return false;
+  sendText('ARM');
+  try { await expect(/^@OK ARM/); return true; } catch (e) { logLine('Freigabe: ' + e.message, 'err'); return false; }
+}
+function testStatus(id, html, err) { const e = id && $(id); if (e) e.innerHTML = err ? `<b style="color:var(--stop)">${html}</b>` : html; }
+async function runTestDrive(name, what, cmds, stId) {
+  if (!st.connected) { testStatus(stId, 'Erst verbinden.', 1); logLine('Erst verbinden.', 'err'); return false; }
+  if (st.testRunning) { testStatus(stId, 'Es läuft schon eine Testfahrt.', 1); return false; }
+  if (!(await armedIn8(what))) { testStatus(stId, 'Nicht freigegeben – Testfahrt nicht gestartet.', 1); return false; }
+  st.testRunning = true; testStatus(stId, name + ' läuft …');
+  let ok = false, obstOff = false;
+  try {
+    let p = expect(/^@OK SPEED/); sendText('SPEED 0'); await p;
+    // Hinderniserkennung für die Testfahrt aus (Firmware ab V16d; ältere antworten mit @ERR)
+    try { p = expect(/^@OK OBST/, 2000); sendText('OBST 0'); await p; obstOff = true; } catch (e) { /* ältere Firmware */ }
+    for (const c of cmds) {
+      if (/^PEN /.test(c)) { p = expect(/^@OK PEN/); sendText(c); await p; await sleep(Math.max(600, st.cfg.penms + 300)); continue; }
+      p = expect(/^@DONE|^@END abort/, 90000); sendText(c);
+      const m = await p;
+      if (/^@END/.test(m[0])) throw new Error('Fahrt abgebrochen' + (obstOff ? '' : ' – vermutlich Hinderniserkennung (Hand, Wand vor dem Sensor). Firmware V16d schaltet sie für Testfahrten ab.'));
+      await sleep(400);
+    }
+    ok = true; logLine(name + ' fertig – jetzt messen und eintragen.');
+    testStatus(stId, name + ' fertig – jetzt messen und eintragen.');
+  } catch (e) {
+    logLine(name + ' abgebrochen: ' + e.message, 'err'); testStatus(stId, name + ' abgebrochen: ' + e.message, 1);
+    sendText('STOP'); await sleep(300);
+  }
+  sendText('PEN U');
+  if (obstOff) { await sleep(200); sendText('OBST 1'); }
+  st.testRunning = false;
+  return ok;
+}
+// Wert setzen und auf Bestätigung warten; "busy" → einmal STOP und nochmal versuchen
+async function setValue(cmd, outId) {
+  if (!st.connected) { logLine('Erst verbinden.', 'err'); testStatus(outId, 'Erst verbinden.', 1); return false; }
+  for (let k = 0; k < 2; k++) {
+    try { const p = expect(/^@OK SET/); sendText(cmd); await p; logLine('Übernommen: ' + cmd); testStatus(outId, 'Übernommen: ' + cmd.replace(/^SET /, '')); return true; }
+    catch (e) {
+      if (k === 0 && /busy/.test(e.message)) { logLine('Roboter war noch beschäftigt – halte an und versuche es nochmal.'); sendText('STOP'); await sleep(800); continue; }
+      const msg = 'Nicht übernommen: ' + e.message; logLine(msg, 'err');
+      testStatus(outId, msg + (/arg/.test(e.message) && /TRIM|TURN/.test(cmd) ? ' – die Firmware auf dem Roboter ist zu alt, bitte V16d flashen.' : ''), 1);
+      return false;
+    }
+  }
+  return false;
+}
+const sideVal = id => ($(id).value === 'l' ? -1 : 1);   // rechts = +, links = −
+
+/* Drehtest mit Linie. Hinlinie L mm, 360° drehen, Rücklinie L mm.
    Abstände der Rücklinie zur Hinlinie (in Fahrtrichtung, rechts = +):
    gW am Wendepunkt = Versatz des Drehpunkts (Rutschen, Mechanik),
    gS am Startpunkt = gW + L·sin(Fehler). Zu weit gedreht um e:
-   rechts → Rücklinie läuft nach links (gS-gW < 0), links → nach rechts. */
+   rechts → Rücklinie läuft nach links (gS-gW < 0), links → nach rechts.
+   V16c: Seite per Auswahl statt Vorzeichen (iPhone-Zahlentastatur hat kein Minus). */
 const TF_LEN_MM = 200;
 function turnTestEval() {
-  const c = st.cfg, dir = $('tfDir').value, gW = +$('tfGapW').value || 0, gS = +$('tfGapS').value || 0;
+  const c = st.cfg, dir = $('tfDir').value;
+  const gW = Math.abs(+$('tfGapW').value || 0) * sideVal('tfSideW'), gS = Math.abs(+$('tfGapS').value || 0) * sideVal('tfSideS');
   const q = Math.max(-1, Math.min(1, (gS - gW) / TF_LEN_MM));
   const over = (dir === 'r' ? -1 : 1) * Math.asin(q) * 180 / Math.PI;     // + = zu weit gedreht
   const old = (dir === 'r' ? c.tr : c.tl) / 1000, f = old * 360 / (360 + over);
@@ -452,31 +516,48 @@ function updateTurnFactors() {
   const nm = r.dir === 'r' ? 'Rechtsdrehung' : 'Linksdrehung';
   const ow = Math.abs(r.over) < 0.05 ? 'genau 360°' : `${(360 + r.over).toFixed(1)}° (${r.over > 0 ? 'zu weit' : 'zu kurz'})`;
   $('tfOut').innerHTML = `Jetzt: rechts ${(c.tr / 1000).toFixed(3)}, links ${(c.tl / 1000).toFixed(3)}.<br>` +
-    `${nm}: gedreht ${ow} → neuer Faktor <b>${ok ? r.f.toFixed(3) : '–'}</b>` +
+    `${nm}: gedreht ${ow} → neuer Faktor <b>${ok ? r.f.toFixed(3) : '– (außerhalb 0,8…1,25)'}</b>` +
     (Math.abs(r.gW) >= 1 ? `<br>Drehpunkt um ${Math.abs(r.gW).toFixed(1)} mm verrutscht – das ist kein Winkelfehler, sondern Rutschen (siehe Anleitung: Räder, Stiftdruck, Stützrad).` : '') +
-    `<br>global.h: <code>#define TURN_FACTOR_${r.dir === 'r' ? 'RIGHT' : 'LEFT'} ${ok ? r.f.toFixed(3) : '…'}</code>`;
-  $('tfSet').disabled = !st.connected || !ok || Math.abs(r.over) < 0.05;
+    `<br>global.h: <code>#define TURN_FACTOR_${r.dir === 'r' ? 'RIGHT' : 'LEFT'} ${ok ? r.f.toFixed(3) : '…'}</code>` +
+    (st.connected ? '' : '<br>Zum Übernehmen erst verbinden.');
+  $('tfSet').disabled = !st.connected || !ok || st.testRunning;
 }
 async function runTurnTest(dir) {
-  if (!st.connected || !(await armedIn8())) return;
   $('tfDir').value = dir; updateTurnFactors();
-  const step = async (cmd, ms) => { const p = expect(/^@DONE/, ms); sendText(cmd); await p; await sleep(400); };
-  try {
-    sendText('SPEED 0'); await sleep(200);
-    sendText('PEN D'); await sleep(900);
-    await step('FWD ' + TF_LEN_MM / 10, 30000);
-    await step('TURN ' + (dir === 'r' ? 360 : -360), 60000);
-    await step('BACK ' + TF_LEN_MM / 10, 30000);
-    logLine('Drehtest fertig: Abstände messen und eintragen.');
-  } catch (e) { logLine('Drehtest: ' + e.message, 'err'); }
-  sendText('PEN U');
+  await runTestDrive('Drehtest', 'Der Roboter zeichnet 20 cm, dreht sich einmal ganz um sich selbst und fährt mit Stift zurück.',
+    ['PEN D', 'FWD ' + TF_LEN_MM / 10, 'TURN ' + (dir === 'r' ? 360 : -360), 'BACK ' + TF_LEN_MM / 10], 'tfSt');
+  updateTurnFactors();
 }
-async function armedIn8() {
-  if (!(await ensureMenu(8))) return false;
-  if (st.armed) return true;
-  if (!(await confirmDialog('Fahren freigeben?', 'Der Roboter fährt gleich 20 cm, dreht sich einmal ganz um sich selbst und fährt zurück. Platz lassen.', 'Freigeben'))) return false;
-  sendText('ARM');
-  try { await expect(/^@OK ARM/); return true; } catch (e) { logLine('Freigabe: ' + e.message, 'err'); return false; }
+
+/* Strecke: 10 cm mit Stift, dann 10 cm mit gehobenem Stift weiter (Roboter aus dem Weg) */
+async function runDistTest() {
+  const cm = Math.max(5, Math.min(50, +$('calDistCmd').value || 10));
+  $('calDistCmd').value = cm; updateCal();
+  await runTestDrive('Streckentest', `Der Roboter zeichnet ${cm} cm und fährt mit gehobenem Stift ${cm} cm weiter.`, ['PEN D', 'FWD ' + cm, 'PEN U', 'FWD ' + cm], 'calDistSt');
+  updateCal();
+}
+
+/* Geradeauslauf: gerade Linie zeichnen; Lineal an Anfang und Ende anlegen, Abstand der
+   Linienmitte zum Lineal (Pfeilhöhe s) messen. Kreisbogen: R = L²/(8s); Unterschied der
+   Radwege (rechts−links)/L = Spurweite/R = 8·Spur·s/L². Linkskurve → Trim positiv. */
+function trimEval() {
+  const c = st.cfg, L = Math.max(100, Math.min(1000, (+$('trLen').value || 40) * 10)), s = Math.abs(+$('trSag').value || 0);
+  const d = 8 * c.track * s / (L * L) * ($('trDir').value === 'l' ? 1 : -1), old = (c.tm || 0) / 10000, t = old + d;
+  return { L, s, old, t, d };
+}
+function updateTrim() {
+  const r = trimEval(), ok = Math.abs(r.t) <= 0.05;
+  $('trOut').innerHTML = `Jetzt: ${(r.old * 100).toFixed(2)} %. ` +
+    (r.s > 0 ? `Radwege unterscheiden sich um ${(Math.abs(r.d) * 100).toFixed(2)} % → neuer Ausgleich <b>${ok ? (r.t * 100).toFixed(2) + ' %' : '– (über 5 %: Mechanik prüfen)'}</b>` : 'Abweichung eintragen.') +
+    `<br>global.h: <code>#define WHEEL_TRIM ${ok ? r.t.toFixed(4) : '…'}</code>` + (st.connected ? '' : '<br>Zum Übernehmen erst verbinden.');
+  const noFw = st.connected && st.cfgHas && !st.cfgHas.has('tm');
+  if (noFw) $('trOut').innerHTML += '<br><b style="color:var(--stop)">Die Firmware auf dem Roboter kennt den Ausgleich noch nicht – bitte V16d flashen.</b>';
+  $('trSet').disabled = !st.connected || !ok || r.s === 0 || st.testRunning || noFw;
+}
+async function runTrimTest() {
+  const cm = Math.max(10, Math.min(100, +$('trLen').value || 40)); $('trLen').value = cm;
+  await runTestDrive('Geradeaus-Test', `Der Roboter zeichnet eine ${cm} cm lange gerade Linie und fährt mit gehobenem Stift 10 cm weiter.`, ['PEN D', 'FWD ' + cm, 'PEN U', 'FWD 10'], 'trSt');
+  updateTrim();
 }
 function updateCal() {
   const c = st.cfg;
@@ -489,6 +570,7 @@ function updateCal() {
   const nw = dc > 0 && da > 0 ? c.wheel * da / dc : NaN;
   $('calDistOut').textContent = isFinite(nw) ? `Neuer Raddurchmesser: ${c.wheel.toFixed(1)} × ${da} / ${dc} = ${nw.toFixed(1)} mm (Spurweite bleibt)` : '';
   $('btnCalDist').disabled = !st.connected || !isFinite(nw) || nw < 20 || nw > 150;
+  if (!st.connected && isFinite(nw)) $('calDistOut').textContent += ' – zum Übernehmen erst verbinden.';
   $('btnCalDist').dataset.v = nw.toFixed(1);
 }
 
@@ -1583,13 +1665,12 @@ function init() {
   const penMenu = async () => { if (st.menu === 0 || st.menu === 8) return true; return ensureMenu(0); };
   $('penSet').onclick = async () => { if (!st.connected || !(await penMenu())) return; sendText('SET PENUP ' + penAng('penUpIn')); await sleep(150); sendText('SET PENDOWN ' + penAng('penDownIn')); };
   $('penTestUp').onclick = async () => { if (st.connected && await penMenu()) sendText('PEN U'); };
-  ['tfGapW', 'tfGapS', 'tfDir'].forEach(id => $(id).oninput = $(id).onchange = updateTurnFactors);
+  ['tfGapW', 'tfGapS', 'tfDir', 'tfSideW', 'tfSideS'].forEach(id => $(id).oninput = $(id).onchange = updateTurnFactors);
   $('tfTestR').onclick = () => runTurnTest('r');
   $('tfTestL').onclick = () => runTurnTest('l');
   $('tfSet').onclick = async () => {
-    const r = turnTestEval(); if (!st.connected) return;
-    sendText((r.dir === 'r' ? 'SET TURNR ' : 'SET TURNL ') + r.f.toFixed(3));
-    $('tfGapW').value = 0; $('tfGapS').value = 0;
+    const r = turnTestEval();
+    if (await setValue((r.dir === 'r' ? 'SET TURNR ' : 'SET TURNL ') + r.f.toFixed(3), 'tfSt')) { $('tfGapW').value = 0; $('tfGapS').value = 0; updateTurnFactors(); }
   };
   $('penTestDown').onclick = async () => { if (st.connected && await penMenu()) sendText('PEN D'); };
   $('imgSend').onclick = sendImage;
@@ -1646,8 +1727,12 @@ function init() {
 
   // Kalibrieren
   ['calTurnCmd', 'calTurnAct', 'calDistCmd', 'calDistAct'].forEach(id => $(id).oninput = updateCal);
-  $('btnCalTurn').onclick = () => sendText('SET TRACK ' + $('btnCalTurn').dataset.v);
-  $('btnCalDist').onclick = () => sendText('SET WHEEL ' + $('btnCalDist').dataset.v);
+  $('btnCalTurn').onclick = () => setValue('SET TRACK ' + $('btnCalTurn').dataset.v, 'calTurnSt');
+  $('btnCalDist').onclick = async () => { if (await setValue('SET WHEEL ' + $('btnCalDist').dataset.v, 'calDistSt')) $('calDistAct').value = $('calDistCmd').value; };
+  $('calDistTest').onclick = runDistTest;
+  ['trLen', 'trSag', 'trDir'].forEach(id => $(id).oninput = $(id).onchange = updateTrim);
+  $('trTest').onclick = runTrimTest;
+  $('trSet').onclick = async () => { const r = trimEval(); if (await setValue('SET TRIM ' + r.t.toFixed(4), 'trSt')) $('trSag').value = 0; };
   $('btnCopyCfg').onclick = () => {
     const t = $('cfgLines').textContent;
     navigator.clipboard.writeText(t).then(() => logLine('Zeilen kopiert.')).catch(() => { const r = document.createRange(); r.selectNodeContents($('cfgLines')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); });
