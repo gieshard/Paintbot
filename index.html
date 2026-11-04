@@ -729,11 +729,11 @@ function pbBanner(t){ var d=document.getElementById('pbBanner'); if(!d){ d=docum
   d.onclick=function(){ d.remove(); }; document.body.appendChild(d); } d.textContent=t+' (Antippen schließt)'; }
 window.addEventListener('error', function(e){ pbBanner('Fehler in der App: '+e.message+(e.filename?' ('+e.filename.split('/').pop()+':'+e.lineno+')':'')); });
 </script>
-<script src="art-gen.js?v=16f"></script>
-<script src="app.js?v=16f"></script>
+<script src="art-gen.js?v=16g"></script>
+<script src="app.js?v=16g"></script>
 <script>
 /* Passen index.html und app.js zusammen? Sonst haben neue Knöpfe keine Funktion. */
-(function(){ var need='V16f', v; try { v = APP_VERSION; } catch (e) { v = null; }
+(function(){ var need='V16g', v; try { v = APP_VERSION; } catch (e) { v = null; }
   if (!v || v.indexOf(need) !== 0) pbBanner('app.js ist veraltet (geladen: '+(v||'alte Fassung')+', nötig: '+need+'). Bitte app.js auf GitHub hochladen und die Seite neu laden.'); })();
 </script>
 </body>

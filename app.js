@@ -226,7 +226,7 @@ class DemoLink {
         else if (/^pendown$/i.test(k) && x >= 0 && x <= 180) c.pd = Math.round(x);
         else if (/^turnl$/i.test(k) && x >= 0.8 && x <= 1.25) c.tl = Math.round(x * 1000);
         else if (/^turnr$/i.test(k) && x >= 0.8 && x <= 1.25) c.tr = Math.round(x * 1000);
-        else if (/^trim$/i.test(k) && x >= -0.05 && x <= 0.05) c.tm = Math.round(x * 10000);
+        else if (/^trim$/i.test(k) && x >= -0.25 && x <= 0.25) c.tm = Math.round(x * 10000);
         else if (/^wsl$/i.test(k) && x >= 0.5 && x <= 1.5) c.wl = Math.round(x * 1000);
         else if (/^wsr$/i.test(k) && x >= 0.5 && x <= 1.5) c.wr = Math.round(x * 1000);
         else { this.say('@ERR arg SET TRACK mm | SET WHEEL mm'); break; }
@@ -427,7 +427,7 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
-const APP_VERSION = 'V16f (05.11.2026)';
+const APP_VERSION = 'V16g (05.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [
@@ -557,9 +557,10 @@ function trimEval() {
   return { L, s, old, t, d };
 }
 function updateTrim() {
-  const r = trimEval(), ok = Math.abs(r.t) <= 0.05;
+  const r = trimEval(), ok = Math.abs(r.t) <= 0.25;
   $('trOut').innerHTML = `Jetzt: ${(r.old * 100).toFixed(2)} %. ` +
-    (r.s > 0 ? `Radwege unterscheiden sich um ${(Math.abs(r.d) * 100).toFixed(2)} % → neuer Ausgleich <b>${ok ? (r.t * 100).toFixed(2) + ' %' : '– (über 5 %: Mechanik prüfen)'}</b>` : 'Abweichung eintragen.') +
+    (ok && Math.abs(r.t) > 0.05 ? '<b>Über 5 % – das ist viel: auf dem Papier rutscht oder verliert ein Rad Schritte (siehe Radtest). Der Ausgleich hilft nur, wenn das Ergebnis bei jeder Fahrt gleich ist.</b><br>' : '') +
+    (r.s > 0 ? `Radwege unterscheiden sich um ${(Math.abs(r.d) * 100).toFixed(2)} % → neuer Ausgleich <b>${ok ? (r.t * 100).toFixed(2) + ' %' : '– (über 25 %: Mechanik prüfen)'}</b>` : 'Abweichung eintragen.') +
     `<br>global.h: <code>#define WHEEL_TRIM ${ok ? r.t.toFixed(4) : '…'}</code>` + (st.connected ? '' : '<br>Zum Übernehmen erst verbinden.');
   const noFw = st.connected && st.cfgHas && !st.cfgHas.has('tm');
   if (noFw) $('trOut').innerHTML += '<br><b style="color:var(--stop)">Die Firmware auf dem Roboter kennt den Ausgleich noch nicht – bitte V16d flashen.</b>';
