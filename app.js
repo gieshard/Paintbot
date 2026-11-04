@@ -305,7 +305,7 @@ function handleLine(line) {
   if (!machine) return;
   const sp = line.indexOf(' '), tag = sp < 0 ? line : line.slice(0, sp), rest = sp < 0 ? '' : line.slice(sp + 1);
   switch (tag) {
-    case '@HELLO': st.fw = rest; $('fwver').textContent = rest; break;
+    case '@HELLO': st.fw = rest; $('fwver').textContent = rest; renderCfg(); break;
     case '@STAT': {
       const o = parseKV(rest);
       st.menu = +o.m; st.armed = o.a === '1'; st.busy = o.b === '1'; st.f = +o.f; st.l = +o.l; st.r = +o.r;
@@ -424,9 +424,11 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
+const APP_VERSION = 'V16d-2 (05.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [
+    ['App-Version', APP_VERSION], ['Firmware', st.fw || '–'],
     ['Raddurchmesser', c.wheel.toFixed(1) + ' mm'], ['Spurweite', c.track.toFixed(1) + ' mm'],
     ['Schrittmodus', c.mode], ['Schritte / Radumdrehung', c.spr], ['Schritte / 360°', (+c.spt).toFixed(0)],
     ['Weg pro Schritt', mm.toFixed(3) + ' mm'],
@@ -444,18 +446,22 @@ function renderCfg() {
    Gemeinsamer Ablauf: Menü 8, Freigabe, Tempo Langsam, dann Befehle nacheinander,
    jeweils bis @DONE. Bei einem Fehler STOP, damit der Roboter nicht "beschäftigt"
    hängen bleibt (sonst lehnt er danach SET … mit "busy" ab). */
-async function armedIn8(what) {
-  if (!(await ensureMenu(8))) return false;
-  if (st.armed) return true;
-  if (!(await confirmDialog('Fahren freigeben?', (what || 'Der Roboter fährt gleich los.') + ' Platz lassen.', 'Freigeben'))) return false;
-  sendText('ARM');
-  try { await expect(/^@OK ARM/); return true; } catch (e) { logLine('Freigabe: ' + e.message, 'err'); return false; }
+async function armedIn8(what, stId) {
+  try {
+    if (!(await ensureMenu(8))) { testStatus(stId, 'Roboter ließ sich nicht auf Menü 8 schalten.', 1); return false; }
+    if (!(await confirmDialog('Testfahrt starten?', (what || 'Der Roboter fährt gleich los.') + ' Platz lassen.', 'Fahren'))) { testStatus(stId, 'Abgebrochen.', 1); return false; }
+    // 05.11.2026: Freigabe IMMER senden (ARM ist im Roboter wiederholbar). Vorher wurde
+    // st.armed vertraut – war es veraltet, lehnte der Roboter danach FWD ab.
+    const p = expect(/^@OK ARM/); sendText('ARM'); await p;
+    return true;
+  } catch (e) { logLine('Freigabe: ' + e.message, 'err'); testStatus(stId, 'Freigabe fehlgeschlagen: ' + e.message, 1); return false; }
 }
 function testStatus(id, html, err) { const e = id && $(id); if (e) e.innerHTML = err ? `<b style="color:var(--stop)">${html}</b>` : html; }
 async function runTestDrive(name, what, cmds, stId) {
   if (!st.connected) { testStatus(stId, 'Erst verbinden.', 1); logLine('Erst verbinden.', 'err'); return false; }
   if (st.testRunning) { testStatus(stId, 'Es läuft schon eine Testfahrt.', 1); return false; }
-  if (!(await armedIn8(what))) { testStatus(stId, 'Nicht freigegeben – Testfahrt nicht gestartet.', 1); return false; }
+  testStatus(stId, 'Schalte auf Menü 8 und gebe frei …');
+  if (!(await armedIn8(what, stId))) return false;
   st.testRunning = true; testStatus(stId, name + ' läuft …');
   let ok = false, obstOff = false;
   try {
@@ -1067,9 +1073,11 @@ function confirmDialog(title, text, yes) {
   return new Promise(res => {
     const d = $('dlgConfirm');
     $('dlgCTitle').textContent = title; $('dlgCText').textContent = text; $('dlgCYes').textContent = yes || 'Bestätigen';
-    const done = v => { d.close(); $('dlgCYes').onclick = $('dlgCNo').onclick = null; res(v); };
+    // 05.11.2026: ältere iPhone-Browser (Bluefy) kennen <dialog> nicht -- dann einfache Rückfrage
+    if (!d || typeof d.showModal !== 'function') { res(window.confirm(title + '\n\n' + text)); return; }
+    const done = v => { try { d.close(); } catch (e) {} $('dlgCYes').onclick = $('dlgCNo').onclick = null; res(v); };
     $('dlgCYes').onclick = () => done(true); $('dlgCNo').onclick = () => done(false);
-    d.showModal();
+    try { d.showModal(); } catch (e) { res(window.confirm(title + '\n\n' + text)); }
   });
 }
 const CONFIRM_TEXT = {
@@ -1745,6 +1753,7 @@ function init() {
   $('btnLogClear').onclick = () => { $('loglines').innerHTML = ''; };
   $('cmdForm').onsubmit = ev => { ev.preventDefault(); const t = $('cmdIn').value.trim(); if (t) { sendText(t); $('cmdIn').value = ''; } };
 
+  logLine('PaintBot-App ' + APP_VERSION);
   renderCfg(); renderStatus(); recomputePlan();
   renderArt(false); syncArtCfg();
   selectView(load('view', 'm0'), false);
