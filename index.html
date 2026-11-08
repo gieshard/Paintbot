@@ -618,6 +618,21 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
           <button class="btn" id="trSet">Ausgleich übernehmen</button>
         </div>
         <div class="card">
+          <h3>Umkehrspiel (Kreise schließen nicht)</h3>
+          <p class="hint">Bei jeder Ecke wechselt ein Rad kurz die Richtung und verliert dabei etwas Weg im Spiel (Welle/Madenschraube, Stacheln). Bei Kreisen aus vielen kleinen Ecken fehlt dann ein Stück. Test: Menü 2 → „Kreis“ (links herum, prüft das <b>linke</b> Rad) bzw. „Kreis rechts herum“ (prüft das <b>rechte</b> Rad) zeichnen, Lücke zwischen Kreisende und Kreisanfang messen.</p>
+          <div class="row">
+            <label class="field">Kreis<select id="blSide"><option value="l">links herum (linkes Rad)</option><option value="r">rechts herum (rechtes Rad)</option></select></label>
+            <label class="field">Radius (mm)<input type="number" id="blR" value="50" min="10" max="250" step="5"></label>
+          </div>
+          <div class="row">
+            <label class="field">Kreisende<select id="blEnd"><option value="gap">vor dem Anfang (Lücke)</option><option value="over">über den Anfang hinaus</option></select></label>
+            <label class="field">Abstand (mm)<input type="number" id="blGap" value="0" min="0" max="200" step="1" inputmode="decimal"></label>
+          </div>
+          <p class="hint" id="blOut"></p>
+          <button class="btn" id="blSet">Umkehrspiel übernehmen</button>
+          <p class="hint" id="blSt"></p>
+        </div>
+        <div class="card">
           <h3>Drehtest mit Linie (links/rechts getrennt)</h3>
           <p class="hint">Der Roboter zeichnet 20 cm vorwärts, dreht 360° und fährt mit Stift die 20 cm zurück. Dreht er genau 360°, liegt die Rücklinie auf der Hinlinie. Gemessen wird, wie weit die Rücklinie neben der Hinlinie liegt – in Fahrtrichtung (vom Start zum Wendepunkt) gesehen rechts oder links. Erst Geradeauslauf einstellen, dann diesen Test.</p>
           <div class="row">
@@ -738,11 +753,11 @@ function pbBanner(t){ var d=document.getElementById('pbBanner'); if(!d){ d=docum
   d.onclick=function(){ d.remove(); }; document.body.appendChild(d); } d.textContent=t+' (Antippen schließt)'; }
 window.addEventListener('error', function(e){ pbBanner('Fehler in der App: '+e.message+(e.filename?' ('+e.filename.split('/').pop()+':'+e.lineno+')':'')); });
 </script>
-<script src="art-gen.js?v=16h2"></script>
-<script src="app.js?v=16h2"></script>
+<script src="art-gen.js?v=16i"></script>
+<script src="app.js?v=16i"></script>
 <script>
 /* Passen index.html und app.js zusammen? Sonst haben neue Knöpfe keine Funktion. */
-(function(){ var need='V16h', v; try { v = APP_VERSION; } catch (e) { v = null; }
+(function(){ var need='V16i', v; try { v = APP_VERSION; } catch (e) { v = null; }
   if (!v || v.indexOf(need) !== 0) pbBanner('app.js ist veraltet (geladen: '+(v||'alte Fassung')+', nötig: '+need+'). Bitte app.js auf GitHub hochladen und die Seite neu laden.'); })();
 </script>
 </body>

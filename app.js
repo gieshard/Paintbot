@@ -46,7 +46,7 @@ const SPEED_NAMES = ['Langsam', 'Mittel', 'Schnell'];
 const DEFAULT_CFG = {
   wheel: 60.0, track: 176.4, spr: 400, spt: 1176, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
   prof: [{ v: 150, a: 250 }, { v: 280, a: 350 }, { v: 420, a: 450 }],
-  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000, tm: 0, wl: 1000, wr: 1000, cf: 1
+  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000, tm: 0, wl: 1000, wr: 1000, cf: 1, bl: 2, br: 2
 };
 const MIN_SEG_MM = 1.0;
 
@@ -168,7 +168,7 @@ class DemoLink {
   }
   cfgLine() {
     const c = this.s.cfg;
-    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm} wl=${c.wl} wr=${c.wr} cf=${c.cf}`);
+    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm} wl=${c.wl} wr=${c.wr} cf=${c.cf} bl=${c.bl} br=${c.br}`);
   }
   canDrive() {
     const s = this.s;
@@ -192,7 +192,7 @@ class DemoLink {
       s.path.push(...pts); this.say('@PATH ' + s.path.length); return;
     }
     switch (w) {
-      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16h)'); this.cfgLine(); this.stat(); break;
+      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16i)'); this.cfgLine(); this.stat(); break;
       case 'OBST': this.say('@OK OBST'); break;
       case 'CORR': if (!/^[01]$/.test(arg)) { this.say('@ERR arg CORR 0|1'); break; } if (this.busy()) { this.say('@ERR busy erst anhalten'); break; } c.cf = +arg; this.say('@OK CORR'); this.cfgLine(); break;
       case 'SPIN': { const [sd, n] = arg.split(/\s+/); if (!/^[lr]$/i.test(sd || '') || !(+n > 0 && +n <= 10)) { this.say('@ERR arg SPIN L|R umdrehungen (0..10)'); break; } if (!this.canDrive()) break; s.move = { left: 1000 * +n }; this.say('@OK SPIN'); break; }
@@ -230,6 +230,8 @@ class DemoLink {
         else if (/^trim$/i.test(k) && x >= -0.25 && x <= 0.25) c.tm = Math.round(x * 10000);
         else if (/^wsl$/i.test(k) && x >= 0.5 && x <= 1.5) c.wl = Math.round(x * 1000);
         else if (/^wsr$/i.test(k) && x >= 0.5 && x <= 1.5) c.wr = Math.round(x * 1000);
+        else if (/^bll$/i.test(k) && x >= 0 && x <= 20) c.bl = Math.round(x);
+        else if (/^blr$/i.test(k) && x >= 0 && x <= 20) c.br = Math.round(x);
         else { this.say('@ERR arg Zahl fehlt oder ungueltig / SET TRACK|WHEEL|PENUP|PENDOWN|TURNL|TURNR|TRIM|WSL|WSR'); break; }
         this.say('Wert gilt bis zum Neustart -- dauerhaft in global.h eintragen.'); this.say('@OK SET'); this.cfgLine(); break;
       }
@@ -321,7 +323,7 @@ function handleLine(line) {
     case '@CFG': {
       const o = parseKV(rest), c = st.cfg;
       st.cfgHas = new Set(Object.keys(o));
-      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr', 'tm', 'wl', 'wr', 'cf']) if (o[k] !== undefined) c[k] = +o[k];
+      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr', 'tm', 'wl', 'wr', 'cf', 'bl', 'br']) if (o[k] !== undefined) c[k] = +o[k];
       if (o.mode) c.mode = o.mode;
       if (o.prof) c.prof = o.prof.split(',').map(t => { const [v, a] = t.split('/'); return { v: +v, a: +a }; });
       if (o.art) c.art = o.art.split(',').map(Number);
@@ -428,7 +430,7 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
-const APP_VERSION = 'V16h-2 (06.11.2026)';
+const APP_VERSION = 'V16i (08.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [
@@ -438,7 +440,7 @@ function renderCfg() {
     ['Weg pro Schritt', mm.toFixed(3) + ' mm'],
     ...c.prof.map((p, i) => [SPEED_NAMES[i], (p.v * mm / 10).toFixed(1) + ' cm/s']),
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}\n#define WHEEL_SCALE_LEFT  ${((c.wl || 1000) / 1000).toFixed(3)}\n#define WHEEL_SCALE_RIGHT ${((c.wr || 1000) / 1000).toFixed(3)}\n#define CORRECTIONS_ENABLED ${c.cf === 0 ? 0 : 1}`;
+  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}\n#define WHEEL_SCALE_LEFT  ${((c.wl || 1000) / 1000).toFixed(3)}\n#define WHEEL_SCALE_RIGHT ${((c.wr || 1000) / 1000).toFixed(3)}\n#define BACKLASH_LEFT_STEPS  ${c.bl ?? 0}\n#define BACKLASH_RIGHT_STEPS ${c.br ?? 0}\n#define CORRECTIONS_ENABLED ${c.cf === 0 ? 0 : 1}`;
   if (document.activeElement !== $('penUpIn')) $('penUpIn').value = c.pu;
   if (document.activeElement !== $('penDownIn')) $('penDownIn').value = c.pd;
   $('penLines').textContent = `penUpAngle = ${c.pu}; penDownAngle = ${c.pd};`;
@@ -447,8 +449,27 @@ function renderCfg() {
   updateSpin();
   updateCal();
   updateCorr();
+  updateBl();
 }
 /* Schalter Korrekturen (V16h): CORR 0|1, @CFG cf */
+/* Umkehrspiel (V16i): Testkreis aus n kleinen Drehungen. Bei jeder Ecke kehrt das innere
+   Rad zweimal um (Drehung + Geradeaus) und verliert je b mm -> Winkel fehlt n·2b/Spur.
+   Lücke g am Kreisende bei Radius R: fehlender Winkel ≈ g/R. Links herum = linkes Rad. */
+function blEval() {
+  const c = st.cfg, R = Math.max(10, +$('blR').value || 50), g = Math.abs(+$('blGap').value || 0) * ($('blEnd').value === 'over' ? -1 : 1);
+  const n = Math.max(24, Math.min(240, Math.ceil(2 * Math.PI * R / 3)));
+  const mmStep = Math.PI * c.wheel / c.spr, dmm = (g / R) * c.track / (2 * n), dSteps = dmm / mmStep;
+  const side = $('blSide').value, old = side === 'l' ? (c.bl ?? 0) : (c.br ?? 0), nw = Math.round(old + dSteps);
+  return { side, old, nw, dSteps, dmm, n };
+}
+function updateBl() {
+  const c = st.cfg, r = blEval(), ok = r.nw >= 0 && r.nw <= 20, noFw = st.connected && st.cfgHas && !st.cfgHas.has('bl');
+  $('blOut').innerHTML = `Jetzt: links ${c.bl ?? 0}, rechts ${c.br ?? 0} Schritte. ` +
+    (Math.abs(r.dSteps) > 0.01 ? `Spiel je Umkehr ≈ ${r.dmm.toFixed(2)} mm (${r.dSteps.toFixed(1)} Schritte) bei ${r.n} Ecken → neu <b>${r.side === 'l' ? 'links' : 'rechts'} ${ok ? r.nw : '–'}</b>` : 'Lücke eintragen.') +
+    `<br>global.h: <code>#define BACKLASH_${r.side === 'l' ? 'LEFT' : 'RIGHT'}_STEPS ${ok ? r.nw : '…'}</code>` +
+    (noFw ? '<br><b style="color:var(--stop)">Die Firmware kennt das Umkehrspiel noch nicht – bitte V16i flashen.</b>' : '') + (corrOff() ? CORR_OFF_HINT : '');
+  $('blSet').disabled = !st.connected || !ok || noFw || corrOff() || Math.abs(r.dSteps) < 0.01 || r.nw === r.old;
+}
 function updateCorr() {
   const c = st.cfg, on = c.cf !== 0, noFw = st.connected && st.cfgHas && !st.cfgHas.has('cf');
   $('corrState').innerHTML = noFw ? '<b style="color:var(--stop)">Die Firmware kennt den Schalter noch nicht – bitte V16h flashen.</b>'
@@ -1184,6 +1205,7 @@ function drawPathOn(cvs, pts, opts = {}) {
    Füllung (01.11.2026): parallele Linien oder Kontur nach innen als Spirale. */
 const APP_SHAPES = [
   { key: 'circle', name: 'Kreis', label: 'Radius (mm)', def: 50, fill: true },
+  { key: 'circleR', name: 'Kreis rechts herum', label: 'Radius (mm)', def: 50, fill: false },   // Umkehrspiel-Test rechtes Rad
   { key: 'rect', name: 'Quadrat', label: 'Seitenlänge (mm)', def: 100, fill: true },
   { key: 'tri', name: 'Dreieck', label: 'Seitenlänge (mm)', def: 120, fill: true },
   { key: 'star', name: 'Stern', label: 'Außenradius (mm)', def: 70, fill: true },
@@ -1199,6 +1221,7 @@ function circlePts(r) {   // Polygon mit ca. 3 mm Kantenlänge, gegen den Uhrzei
 // Mittelpunkt (= Startpunkt des Roboters) bei 0,0
 function shapeOutline(key, size) {
   if (key === 'circle') return circlePts(size);
+  if (key === 'circleR') return circlePts(size).map(([x, y]) => [x, -y]);   // im Uhrzeigersinn
   let v;
   if (key === 'rect') { const h = size / 2; v = [[h, -h], [h, h], [-h, h], [-h, -h]]; }
   else if (key === 'tri') { const H = size * Math.sqrt(3) / 2; v = [[-size / 2, -H / 3], [size / 2, -H / 3], [0, 2 * H / 3]]; }
@@ -1800,6 +1823,8 @@ function init() {
     }
   };
   $('corrOn').onclick = () => corrSet(1);
+  ['blR', 'blGap', 'blEnd', 'blSide'].forEach(id => $(id).oninput = $(id).onchange = updateBl);
+  $('blSet').onclick = async () => { const r = blEval(); if (await setValue((r.side === 'l' ? 'SET BLL ' : 'SET BLR ') + r.nw, 'blSt')) $('blGap').value = 0; updateBl(); };
   $('corrOff').onclick = () => corrSet(0);
   ['spinCntL', 'spinCntR'].forEach(id => $(id).oninput = updateSpin);
   $('spinSet').onclick = async () => {
