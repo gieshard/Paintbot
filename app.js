@@ -46,7 +46,7 @@ const SPEED_NAMES = ['Langsam', 'Mittel', 'Schnell'];
 const DEFAULT_CFG = {
   wheel: 60.0, track: 176.4, spr: 400, spt: 1176, mode: 'INTERLEAVE', menus: 8, pmax: 1500,
   prof: [{ v: 150, a: 250 }, { v: 280, a: 350 }, { v: 420, a: 450 }],
-  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000, tm: 0, wl: 1000, wr: 1000
+  art: [0, 0], penms: 300, ret: 1, keep: 1, pu: 100, pd: 60, tl: 1000, tr: 1000, tm: 0, wl: 1000, wr: 1000, cf: 1
 };
 const MIN_SEG_MM = 1.0;
 
@@ -168,7 +168,7 @@ class DemoLink {
   }
   cfgLine() {
     const c = this.s.cfg;
-    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm} wl=${c.wl} wr=${c.wr}`);
+    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm} wl=${c.wl} wr=${c.wr} cf=${c.cf}`);
   }
   canDrive() {
     const s = this.s;
@@ -192,9 +192,10 @@ class DemoLink {
       s.path.push(...pts); this.say('@PATH ' + s.path.length); return;
     }
     switch (w) {
-      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16d)'); this.cfgLine(); this.stat(); break;
+      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16h)'); this.cfgLine(); this.stat(); break;
       case 'OBST': this.say('@OK OBST'); break;
-      case 'SPIN': if (!this.canDrive()) break; s.move = { left: 2000 }; this.say('@OK SPIN'); break;
+      case 'CORR': if (!/^[01]$/.test(arg)) { this.say('@ERR arg CORR 0|1'); break; } if (this.busy()) { this.say('@ERR busy erst anhalten'); break; } c.cf = +arg; this.say('@OK CORR'); this.cfgLine(); break;
+      case 'SPIN': { const [sd, n] = arg.split(/\s+/); if (!/^[lr]$/i.test(sd || '') || !(+n > 0 && +n <= 10)) { this.say('@ERR arg SPIN L|R umdrehungen (0..10)'); break; } if (!this.canDrive()) break; s.move = { left: 1000 * +n }; this.say('@OK SPIN'); break; }
       case 'TELEM': s.tel = arg !== '0'; this.say('@OK TELEM'); break;
       case 'STAT': this.stat(); break;
       case 'CFG': this.cfgLine(); break;
@@ -229,7 +230,7 @@ class DemoLink {
         else if (/^trim$/i.test(k) && x >= -0.25 && x <= 0.25) c.tm = Math.round(x * 10000);
         else if (/^wsl$/i.test(k) && x >= 0.5 && x <= 1.5) c.wl = Math.round(x * 1000);
         else if (/^wsr$/i.test(k) && x >= 0.5 && x <= 1.5) c.wr = Math.round(x * 1000);
-        else { this.say('@ERR arg SET TRACK mm | SET WHEEL mm'); break; }
+        else { this.say('@ERR arg Zahl fehlt oder ungueltig / SET TRACK|WHEEL|PENUP|PENDOWN|TURNL|TURNR|TRIM|WSL|WSR'); break; }
         this.say('Wert gilt bis zum Neustart -- dauerhaft in global.h eintragen.'); this.say('@OK SET'); this.cfgLine(); break;
       }
       case 'PCLR': s.path = []; this.say('@PATH 0'); break;
@@ -320,7 +321,7 @@ function handleLine(line) {
     case '@CFG': {
       const o = parseKV(rest), c = st.cfg;
       st.cfgHas = new Set(Object.keys(o));
-      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr', 'tm', 'wl', 'wr']) if (o[k] !== undefined) c[k] = +o[k];
+      for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr', 'tm', 'wl', 'wr', 'cf']) if (o[k] !== undefined) c[k] = +o[k];
       if (o.mode) c.mode = o.mode;
       if (o.prof) c.prof = o.prof.split(',').map(t => { const [v, a] = t.split('/'); return { v: +v, a: +a }; });
       if (o.art) c.art = o.art.split(',').map(Number);
@@ -353,7 +354,7 @@ function onState(connected, name) {
   $('btnDemo').hidden = connected && !st.demo;
   $('btnDemo').textContent = connected && st.demo ? 'Demo beenden' : 'Demo';
   if (!connected) st.testRunning = false;
-  updateCal(); updateTurnFactors(); updateTrim();
+  updateCal(); updateTurnFactors(); updateTrim(); updateSpin(); updateCorr();
   renderStatus();
 }
 async function connect(demo) {
@@ -427,7 +428,7 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
-const APP_VERSION = 'V16g (05.11.2026)';
+const APP_VERSION = 'V16h-2 (06.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [
@@ -437,7 +438,7 @@ function renderCfg() {
     ['Weg pro Schritt', mm.toFixed(3) + ' mm'],
     ...c.prof.map((p, i) => [SPEED_NAMES[i], (p.v * mm / 10).toFixed(1) + ' cm/s']),
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}\n#define WHEEL_SCALE_LEFT  ${((c.wl || 1000) / 1000).toFixed(3)}\n#define WHEEL_SCALE_RIGHT ${((c.wr || 1000) / 1000).toFixed(3)}`;
+  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}\n#define WHEEL_SCALE_LEFT  ${((c.wl || 1000) / 1000).toFixed(3)}\n#define WHEEL_SCALE_RIGHT ${((c.wr || 1000) / 1000).toFixed(3)}\n#define CORRECTIONS_ENABLED ${c.cf === 0 ? 0 : 1}`;
   if (document.activeElement !== $('penUpIn')) $('penUpIn').value = c.pu;
   if (document.activeElement !== $('penDownIn')) $('penDownIn').value = c.pd;
   $('penLines').textContent = `penUpAngle = ${c.pu}; penDownAngle = ${c.pd};`;
@@ -445,6 +446,15 @@ function renderCfg() {
   updateTrim();
   updateSpin();
   updateCal();
+  updateCorr();
+}
+/* Schalter Korrekturen (V16h): CORR 0|1, @CFG cf */
+function updateCorr() {
+  const c = st.cfg, on = c.cf !== 0, noFw = st.connected && st.cfgHas && !st.cfgHas.has('cf');
+  $('corrState').innerHTML = noFw ? '<b style="color:var(--stop)">Die Firmware kennt den Schalter noch nicht – bitte V16h flashen.</b>'
+    : (on ? '<b>AN</b> – Dreh-, Rad- und Geradeaus-Faktoren wirken.' : '<b>AUS</b> – alle Korrekturfaktoren wirken wie 1 (gespeicherte Werte bleiben erhalten).');
+  $('corrOn').disabled = !st.connected || noFw || on || st.testRunning;
+  $('corrOff').disabled = !st.connected || noFw || !on || st.testRunning;
 }
 /* ---------- Testfahrten (V16c, 04.11.2026) ----------
    Gemeinsamer Ablauf: Menü 8, Freigabe, Tempo Langsam, dann Befehle nacheinander,
@@ -473,7 +483,7 @@ async function runTestDrive(name, what, cmds, stId) {
     // Hinderniserkennung für die Testfahrt aus (Firmware ab V16d; ältere antworten mit @ERR)
     try { p = expect(/^@OK OBST/, 2000); sendText('OBST 0'); await p; obstOff = true; } catch (e) { /* ältere Firmware */ }
     for (const c of cmds) {
-      if (/^PEN /.test(c)) { p = expect(/^@OK PEN/); sendText(c); await p; await sleep(Math.max(600, st.cfg.penms + 300)); continue; }
+      if (/^PEN /.test(c)) { p = expect(/^@OK PEN/); sendText(c); await p; await sleep(Math.max(1000, st.cfg.penms + 700)); continue; }
       p = expect(/^@DONE|^@END abort/, 90000); sendText(c);
       const m = await p;
       if (/^@END/.test(m[0])) throw new Error('Fahrt abgebrochen' + (obstOff ? '' : ' – vermutlich Hinderniserkennung (Hand, Wand vor dem Sensor). Firmware V16d schaltet sie für Testfahrten ab.'));
@@ -488,7 +498,7 @@ async function runTestDrive(name, what, cmds, stId) {
   sendText('PEN U');
   if (obstOff) { await sleep(200); sendText('OBST 1'); }
   st.testRunning = false;
-  updateCal(); updateTurnFactors(); updateTrim(); updateSpin();
+  updateCal(); updateTurnFactors(); updateTrim(); updateSpin(); updateCorr();
   return ok;
 }
 // Wert setzen und auf Bestätigung warten; "busy" → einmal STOP und nochmal versuchen
@@ -531,7 +541,8 @@ function updateTurnFactors() {
     (Math.abs(r.gW) >= 1 ? `<br>Drehpunkt um ${Math.abs(r.gW).toFixed(1)} mm verrutscht – das ist kein Winkelfehler, sondern Rutschen (siehe Anleitung: Räder, Stiftdruck, Stützrad).` : '') +
     `<br>global.h: <code>#define TURN_FACTOR_${r.dir === 'r' ? 'RIGHT' : 'LEFT'} ${ok ? r.f.toFixed(3) : '…'}</code>` +
     (st.connected ? '' : '<br>Zum Übernehmen erst verbinden.');
-  $('tfSet').disabled = !st.connected || !ok || st.testRunning;
+  $('tfSet').disabled = !st.connected || !ok || st.testRunning || corrOff();
+  if (corrOff()) $('tfOut').innerHTML += CORR_OFF_HINT;
 }
 async function runTurnTest(dir) {
   $('tfDir').value = dir; updateTurnFactors();
@@ -544,7 +555,10 @@ async function runTurnTest(dir) {
 async function runDistTest() {
   const cm = Math.max(5, Math.min(50, +$('calDistCmd').value || 10));
   $('calDistCmd').value = cm; updateCal();
-  await runTestDrive('Streckentest', `Der Roboter zeichnet ${cm} cm und fährt mit gehobenem Stift ${cm} cm weiter.`, ['PEN D', 'FWD ' + cm, 'PEN U', 'FWD ' + cm], 'calDistSt');
+  // 05.11.2026: erst ein Punkt im Stand (Startmarke), dann die Linie. Gemessen wird vom
+  // Punkt bis zum Linienende -- so stört es nicht, wenn der Stift beim Anfahren erst
+  // verspätet aufs Papier kommt (eine Lücke zwischen Punkt und Linie zeigt genau das).
+  await runTestDrive('Streckentest', `Der Roboter setzt einen Punkt, zeichnet ${cm} cm und fährt mit gehobenem Stift ${cm} cm weiter.`, ['PEN D', 'PEN U', 'PEN D', 'FWD ' + cm, 'PEN U', 'FWD ' + cm], 'calDistSt');
   updateCal();
 }
 
@@ -564,7 +578,8 @@ function updateTrim() {
     `<br>global.h: <code>#define WHEEL_TRIM ${ok ? r.t.toFixed(4) : '…'}</code>` + (st.connected ? '' : '<br>Zum Übernehmen erst verbinden.');
   const noFw = st.connected && st.cfgHas && !st.cfgHas.has('tm');
   if (noFw) $('trOut').innerHTML += '<br><b style="color:var(--stop)">Die Firmware auf dem Roboter kennt den Ausgleich noch nicht – bitte V16d flashen.</b>';
-  $('trSet').disabled = !st.connected || !ok || r.s === 0 || st.testRunning || noFw;
+  $('trSet').disabled = !st.connected || !ok || r.s === 0 || st.testRunning || noFw || corrOff();
+  if (corrOff()) $('trOut').innerHTML += CORR_OFF_HINT;
 }
 /* Radtest (V16e): Roboter hochheben, ein Rad dreht genau n Umdrehungen. */
 async function runSpin(side) {
@@ -573,6 +588,10 @@ async function runSpin(side) {
     `Roboter HOCHHEBEN – das ${side === 'L' ? 'linke' : 'rechte'} Rad dreht genau ${n} Umdrehungen vorwärts.`, ['SPIN ' + side + ' ' + n], 'spinSt');
 }
 const SPIN_TURNS = 2;
+// 06.11.2026: Bei Korrekturen AUS fährt der Roboter mit neutralen Faktoren -- ein daraus
+// berechneter Faktor wäre falsch (alter Wert ≠ wirksamer Wert). Übernehmen daher sperren.
+const corrOff = () => st.connected && st.cfg.cf === 0;
+const CORR_OFF_HINT = '<br><b style="color:var(--stop)">Korrekturen sind AUS – zum Einmessen oben „Korrekturen AN“ wählen und den Test wiederholen.</b>';
 function spinEval() {
   const c = st.cfg, ul = +$('spinCntL').value, ur = +$('spinCntR').value;
   const ol = (c.wl || 1000) / 1000, or = (c.wr || 1000) / 1000;
@@ -585,7 +604,8 @@ function updateSpin() {
   $('spinOut').innerHTML = `Jetzt: links ${r.ol.toFixed(3)}, rechts ${r.or.toFixed(3)} → neu: links <b>${ok(r.fl) ? r.fl.toFixed(3) : '–'}</b>, rechts <b>${ok(r.fr) ? r.fr.toFixed(3) : '–'}</b>` +
     `<br>global.h: <code>#define WHEEL_SCALE_LEFT ${ok(r.fl) ? r.fl.toFixed(3) : '…'}</code> / <code>#define WHEEL_SCALE_RIGHT ${ok(r.fr) ? r.fr.toFixed(3) : '…'}</code>` +
     (noFw ? '<br><b style="color:var(--stop)">Die Firmware auf dem Roboter kennt die Radfaktoren noch nicht – bitte V16f flashen.</b>' : '');
-  $('spinSet').disabled = !st.connected || !ok(r.fl) || !ok(r.fr) || noFw || st.testRunning;
+  $('spinSet').disabled = !st.connected || !ok(r.fl) || !ok(r.fr) || noFw || st.testRunning || corrOff();
+  if (corrOff()) $('spinOut').innerHTML += CORR_OFF_HINT;
 }
 async function runTrimTest() {
   const cm = Math.max(10, Math.min(100, +$('trLen').value || 40)); $('trLen').value = cm;
@@ -1705,7 +1725,8 @@ function init() {
   $('tfTestL').onclick = () => runTurnTest('l');
   $('tfSet').onclick = async () => {
     const r = turnTestEval();
-    if (await setValue((r.dir === 'r' ? 'SET TURNR ' : 'SET TURNL ') + r.f.toFixed(3), 'tfSt')) { $('tfGapW').value = 0; $('tfGapS').value = 0; updateTurnFactors(); }
+    if (await setValue((r.dir === 'r' ? 'SET TURNR ' : 'SET TURNL ') + r.f.toFixed(3), 'tfSt')) { $('tfGapW').value = 0; $('tfGapS').value = 0; }
+    updateTurnFactors();
   };
   $('penTestDown').onclick = async () => { if (st.connected && await penMenu()) sendText('PEN D'); };
   $('imgSend').onclick = sendImage;
@@ -1768,13 +1789,28 @@ function init() {
   ['trLen', 'trSag', 'trDir'].forEach(id => $(id).oninput = $(id).onchange = updateTrim);
   $('trTest').onclick = runTrimTest;
   $('spinL').onclick = () => runSpin('L');
+  const corrSet = async v => {
+    if (!st.connected) return;
+    for (let k = 0; k < 2; k++) {
+      try { const p = expect(/^@OK CORR/); sendText('CORR ' + v); await p; logLine(v ? 'Korrekturen AN' : 'Korrekturen AUS'); return; }
+      catch (e) {
+        if (k === 0 && /busy/.test(e.message)) { logLine('Roboter war beschäftigt – halte an und versuche es nochmal.'); sendText('STOP'); await sleep(800); continue; }
+        logLine('Korrekturen: ' + e.message, 'err'); $('corrState').innerHTML += `<br><b style="color:var(--stop)">Nicht umgeschaltet: ${e.message}</b>`; return;
+      }
+    }
+  };
+  $('corrOn').onclick = () => corrSet(1);
+  $('corrOff').onclick = () => corrSet(0);
   ['spinCntL', 'spinCntR'].forEach(id => $(id).oninput = updateSpin);
   $('spinSet').onclick = async () => {
     const r = spinEval();
-    if (await setValue('SET WSL ' + r.fl.toFixed(3), 'spinSt') && await setValue('SET WSR ' + r.fr.toFixed(3), 'spinSt')) { $('spinCntL').value = SPIN_TURNS; $('spinCntR').value = SPIN_TURNS; updateSpin(); }
+    // Felder sofort nach jedem erfolgreichen Wert zurücksetzen (sonst doppelte Korrektur bei erneutem Druck)
+    if (await setValue('SET WSL ' + r.fl.toFixed(3), 'spinSt')) $('spinCntL').value = SPIN_TURNS;
+    if (await setValue('SET WSR ' + r.fr.toFixed(3), 'spinSt')) $('spinCntR').value = SPIN_TURNS;
+    updateSpin();
   };
   $('spinR').onclick = () => runSpin('R');
-  $('trSet').onclick = async () => { const r = trimEval(); if (await setValue('SET TRIM ' + r.t.toFixed(4), 'trSt')) $('trSag').value = 0; };
+  $('trSet').onclick = async () => { const r = trimEval(); if (await setValue('SET TRIM ' + r.t.toFixed(4), 'trSt')) $('trSag').value = 0; updateTrim(); };
   $('btnCopyCfg').onclick = () => {
     const t = $('cfgLines').textContent;
     navigator.clipboard.writeText(t).then(() => logLine('Zeilen kopiert.')).catch(() => { const r = document.createRange(); r.selectNodeContents($('cfgLines')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); });

@@ -559,6 +559,15 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
           <button class="btn small" id="btnCopyCfg">Zeilen kopieren</button>
         </div>
         <div class="card">
+          <h3>Korrekturen an / aus</h3>
+          <p class="hint">Schaltet alle Korrekturfaktoren gemeinsam: Drehfaktor links/rechts, Radfaktoren, Geradeaus-Ausgleich. „Aus“ = wie ohne Korrektur, zum Vergleichen. Die Werte bleiben gespeichert. Raddurchmesser und Spurweite sind Grundmaße und bleiben immer aktiv. Gilt bis zum Neustart – dauerhaft über <code>CORRECTIONS_ENABLED</code> in <code>global.h</code>.</p>
+          <p class="hint" id="corrState"></p>
+          <div class="row">
+            <button class="btn" id="corrOn">Korrekturen AN</button>
+            <button class="btn" id="corrOff">Korrekturen AUS</button>
+          </div>
+        </div>
+        <div class="card">
           <h3>Drehung korrigieren</h3>
           <p class="hint">In „App-Fahren“ 90° (oder 360°) drehen lassen und den echten Winkel messen.</p>
           <div class="row">
@@ -571,7 +580,7 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
         </div>
         <div class="card">
           <h3>Strecke korrigieren</h3>
-          <p class="hint"><b>Testfahrt:</b> Der Roboter zeichnet eine Linie (Stift unten) und fährt dann mit gehobenem Stift noch einmal so weit, damit du die Linie frei messen kannst. Gemessen wird die Länge des Strichs.</p>
+          <p class="hint"><b>Testfahrt:</b> Der Roboter setzt im Stand einen Punkt, zeichnet dann die Linie und fährt mit gehobenem Stift noch einmal so weit, damit du frei messen kannst. <b>Gemessen wird vom Punkt bis zum Ende der Linie.</b> Liegt zwischen Punkt und Linienanfang eine Lücke, kommt der Stift beim Losfahren zu spät aufs Papier (Stiftzeit erhöhen).</p>
           <div class="row">
             <button class="btn small" id="calDistTest">Testfahrt zeichnen</button>
             <label class="field">befohlen (cm)<input type="number" id="calDistCmd" value="10" min="5" max="50" step="1"></label>
@@ -729,11 +738,11 @@ function pbBanner(t){ var d=document.getElementById('pbBanner'); if(!d){ d=docum
   d.onclick=function(){ d.remove(); }; document.body.appendChild(d); } d.textContent=t+' (Antippen schließt)'; }
 window.addEventListener('error', function(e){ pbBanner('Fehler in der App: '+e.message+(e.filename?' ('+e.filename.split('/').pop()+':'+e.lineno+')':'')); });
 </script>
-<script src="art-gen.js?v=16g"></script>
-<script src="app.js?v=16g"></script>
+<script src="art-gen.js?v=16h2"></script>
+<script src="app.js?v=16h2"></script>
 <script>
 /* Passen index.html und app.js zusammen? Sonst haben neue Knöpfe keine Funktion. */
-(function(){ var need='V16g', v; try { v = APP_VERSION; } catch (e) { v = null; }
+(function(){ var need='V16h', v; try { v = APP_VERSION; } catch (e) { v = null; }
   if (!v || v.indexOf(need) !== 0) pbBanner('app.js ist veraltet (geladen: '+(v||'alte Fassung')+', nötig: '+need+'). Bitte app.js auf GitHub hochladen und die Seite neu laden.'); })();
 </script>
 </body>
