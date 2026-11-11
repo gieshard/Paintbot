@@ -168,7 +168,7 @@ class DemoLink {
   }
   cfgLine() {
     const c = this.s.cfg;
-    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm} wl=${c.wl} wr=${c.wr} cf=${c.cf} bl=${c.bl} br=${c.br}`);
+    this.say(`@CFG wheel=${c.wheel.toFixed(1)} track=${c.track.toFixed(1)} spr=${c.spr} spt=${(c.track * c.spr / c.wheel).toFixed(1)} mode=${c.mode} menus=8 pmax=${c.pmax} prof=${c.prof.map(p => p.v + '/' + p.a).join(',')} art=${c.art.join(',')} penms=${c.penms} ret=${c.ret} keep=${c.keep} pu=${c.pu} pd=${c.pd} tl=${c.tl} tr=${c.tr} tm=${c.tm} wl=${c.wl} wr=${c.wr} cf=${c.cf} blt=${Math.round(c.bl * 10)} brt=${Math.round(c.br * 10)}`);
   }
   canDrive() {
     const s = this.s;
@@ -192,7 +192,7 @@ class DemoLink {
       s.path.push(...pts); this.say('@PATH ' + s.path.length); return;
     }
     switch (w) {
-      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16i)'); this.cfgLine(); this.stat(); break;
+      case 'HELLO': s.tel = true; this.say('@HELLO PaintBot DEMO (V16j)'); this.cfgLine(); this.stat(); break;
       case 'OBST': this.say('@OK OBST'); break;
       case 'CORR': if (!/^[01]$/.test(arg)) { this.say('@ERR arg CORR 0|1'); break; } if (this.busy()) { this.say('@ERR busy erst anhalten'); break; } c.cf = +arg; this.say('@OK CORR'); this.cfgLine(); break;
       case 'SPIN': { const [sd, n] = arg.split(/\s+/); if (!/^[lr]$/i.test(sd || '') || !(+n > 0 && +n <= 10)) { this.say('@ERR arg SPIN L|R umdrehungen (0..10)'); break; } if (!this.canDrive()) break; s.move = { left: 1000 * +n }; this.say('@OK SPIN'); break; }
@@ -230,8 +230,8 @@ class DemoLink {
         else if (/^trim$/i.test(k) && x >= -0.25 && x <= 0.25) c.tm = Math.round(x * 10000);
         else if (/^wsl$/i.test(k) && x >= 0.5 && x <= 1.5) c.wl = Math.round(x * 1000);
         else if (/^wsr$/i.test(k) && x >= 0.5 && x <= 1.5) c.wr = Math.round(x * 1000);
-        else if (/^bll$/i.test(k) && x >= 0 && x <= 20) c.bl = Math.round(x);
-        else if (/^blr$/i.test(k) && x >= 0 && x <= 20) c.br = Math.round(x);
+        else if (/^bll$/i.test(k) && x >= 0 && x <= 20) c.bl = Math.round(x * 10) / 10;
+        else if (/^blr$/i.test(k) && x >= 0 && x <= 20) c.br = Math.round(x * 10) / 10;
         else { this.say('@ERR arg Zahl fehlt oder ungueltig / SET TRACK|WHEEL|PENUP|PENDOWN|TURNL|TURNR|TRIM|WSL|WSR'); break; }
         this.say('Wert gilt bis zum Neustart -- dauerhaft in global.h eintragen.'); this.say('@OK SET'); this.cfgLine(); break;
       }
@@ -325,6 +325,8 @@ function handleLine(line) {
       st.cfgHas = new Set(Object.keys(o));
       for (const k of ['wheel', 'track', 'spr', 'spt', 'menus', 'pmax', 'penms', 'ret', 'keep', 'pu', 'pd', 'tl', 'tr', 'tm', 'wl', 'wr', 'cf', 'bl', 'br']) if (o[k] !== undefined) c[k] = +o[k];
       if (o.mode) c.mode = o.mode;
+      if (o.blt !== undefined) c.bl = +o.blt / 10;   // V16j: Umkehrspiel in Zehnteln
+      if (o.brt !== undefined) c.br = +o.brt / 10;
       if (o.prof) c.prof = o.prof.split(',').map(t => { const [v, a] = t.split('/'); return { v: +v, a: +a }; });
       if (o.art) c.art = o.art.split(',').map(Number);
       renderCfg(); syncArtCfg(); recomputePlan(); break;
@@ -430,7 +432,7 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
-const APP_VERSION = 'V16i (08.11.2026)';
+const APP_VERSION = 'V16j-2 (10.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [
@@ -440,7 +442,7 @@ function renderCfg() {
     ['Weg pro Schritt', mm.toFixed(3) + ' mm'],
     ...c.prof.map((p, i) => [SPEED_NAMES[i], (p.v * mm / 10).toFixed(1) + ' cm/s']),
   ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
-  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}\n#define WHEEL_SCALE_LEFT  ${((c.wl || 1000) / 1000).toFixed(3)}\n#define WHEEL_SCALE_RIGHT ${((c.wr || 1000) / 1000).toFixed(3)}\n#define BACKLASH_LEFT_STEPS  ${c.bl ?? 0}\n#define BACKLASH_RIGHT_STEPS ${c.br ?? 0}\n#define CORRECTIONS_ENABLED ${c.cf === 0 ? 0 : 1}`;
+  $('cfgLines').textContent = `#define WHEEL_DIAMETER_MM ${c.wheel.toFixed(1)}\n#define TRACK_WIDTH_MM    ${c.track.toFixed(1)}\nint penUpAngle   = ${c.pu};\nint penDownAngle = ${c.pd};\n#define TURN_FACTOR_LEFT  ${(c.tl / 1000).toFixed(3)}\n#define TURN_FACTOR_RIGHT ${(c.tr / 1000).toFixed(3)}\n#define WHEEL_TRIM ${((c.tm || 0) / 10000).toFixed(4)}\n#define WHEEL_SCALE_LEFT  ${((c.wl || 1000) / 1000).toFixed(3)}\n#define WHEEL_SCALE_RIGHT ${((c.wr || 1000) / 1000).toFixed(3)}\n#define BACKLASH_LEFT_STEPS  ${(c.bl ?? 0).toFixed(1)}\n#define BACKLASH_RIGHT_STEPS ${(c.br ?? 0).toFixed(1)}\n#define CORRECTIONS_ENABLED ${c.cf === 0 ? 0 : 1}`;
   if (document.activeElement !== $('penUpIn')) $('penUpIn').value = c.pu;
   if (document.activeElement !== $('penDownIn')) $('penDownIn').value = c.pd;
   $('penLines').textContent = `penUpAngle = ${c.pu}; penDownAngle = ${c.pd};`;
@@ -459,16 +461,26 @@ function blEval() {
   const c = st.cfg, R = Math.max(10, +$('blR').value || 50), g = Math.abs(+$('blGap').value || 0) * ($('blEnd').value === 'over' ? -1 : 1);
   const n = Math.max(24, Math.min(240, Math.ceil(2 * Math.PI * R / 3)));
   const mmStep = Math.PI * c.wheel / c.spr, dmm = (g / R) * c.track / (2 * n), dSteps = dmm / mmStep;
-  const side = $('blSide').value, old = side === 'l' ? (c.bl ?? 0) : (c.br ?? 0), nw = Math.round(old + dSteps);
+  const side = $('blSide').value, old = side === 'l' ? (c.bl ?? 0) : (c.br ?? 0), nw = Math.round((old + dSteps) * 10) / 10;
   return { side, old, nw, dSteps, dmm, n };
 }
 function updateBl() {
-  const c = st.cfg, r = blEval(), ok = r.nw >= 0 && r.nw <= 20, noFw = st.connected && st.cfgHas && !st.cfgHas.has('bl');
-  $('blOut').innerHTML = `Jetzt: links ${c.bl ?? 0}, rechts ${c.br ?? 0} Schritte. ` +
-    (Math.abs(r.dSteps) > 0.01 ? `Spiel je Umkehr ≈ ${r.dmm.toFixed(2)} mm (${r.dSteps.toFixed(1)} Schritte) bei ${r.n} Ecken → neu <b>${r.side === 'l' ? 'links' : 'rechts'} ${ok ? r.nw : '–'}</b>` : 'Lücke eintragen.') +
-    `<br>global.h: <code>#define BACKLASH_${r.side === 'l' ? 'LEFT' : 'RIGHT'}_STEPS ${ok ? r.nw : '…'}</code>` +
-    (noFw ? '<br><b style="color:var(--stop)">Die Firmware kennt das Umkehrspiel noch nicht – bitte V16i flashen.</b>' : '') + (corrOff() ? CORR_OFF_HINT : '');
+  const c = st.cfg, r = blEval(), ok = r.nw >= 0 && r.nw <= 20, noFw = st.connected && st.cfgHas && !st.cfgHas.has('blt');
+  $('blOut').innerHTML = `Jetzt: links ${(c.bl ?? 0).toFixed(1)}, rechts ${(c.br ?? 0).toFixed(1)} Schritte. ` +
+    (Math.abs(r.dSteps) > 0.01 ? `Spiel je Umkehr ≈ ${r.dmm.toFixed(2)} mm (${r.dSteps.toFixed(1)} Schritte) bei ${r.n} Ecken → neu <b>${r.side === 'l' ? 'links' : 'rechts'} ${ok ? r.nw.toFixed(1) : '–'}</b>` : 'Lücke eintragen.') +
+    `<br>global.h: <code>#define BACKLASH_${r.side === 'l' ? 'LEFT' : 'RIGHT'}_STEPS ${ok ? r.nw.toFixed(1) : '…'}</code>` +
+    (noFw ? '<br><b style="color:var(--stop)">Die Firmware kann das Umkehrspiel noch nicht in Bruchteilen – bitte V16j flashen.</b>' : '') + (corrOff() ? CORR_OFF_HINT : '');
   $('blSet').disabled = !st.connected || !ok || noFw || corrOff() || Math.abs(r.dSteps) < 0.01 || r.nw === r.old;
+}
+// 10.11.2026: Testkreis direkt aus den Einstellungen (Menü 2, ohne Freigabe wie die Formen)
+async function drawTestCircle(side) {
+  if (!st.connected) { testStatus('blSt', 'Erst verbinden.', 1); return; }
+  if (st.sending || st.testRunning) { testStatus('blSt', 'Es läuft schon eine Übertragung oder Testfahrt.', 1); return; }
+  const R = Math.max(10, Math.min(250, +$('blR').value || 50));
+  $('blSide').value = side; updateBl();
+  const pts = shapePoints(side === 'l' ? 'circle' : 'circleR', R), plan = planRobot(pts, st.cfg);
+  testStatus('blSt', `Kreis ${side === 'l' ? 'links' : 'rechts'} herum, Radius ${R} mm: Roboter mit dem Stift auf den Kreisrand stellen, Blick nach vorn – der Kreis liegt ${side === 'l' ? 'links' : 'rechts'} vom Roboter.`);
+  await sendPath(pts, { menu: 2, paper: 'beliebig', plan, prog: $('blProg'), info: $('blInfo'), target: 'test', onState: () => { $('blCircL').disabled = $('blCircR').disabled = st.sending; } });
 }
 function updateCorr() {
   const c = st.cfg, on = c.cf !== 0, noFw = st.connected && st.cfgHas && !st.cfgHas.has('cf');
@@ -899,7 +911,7 @@ function renderLive() {
   const pr = l.prog || $('sendProg'), info = l.info || $('sendInfo');
   pr.hidden = false; pr.max = l.n; pr.value = l.done === 'ok' ? l.n : Math.max(0, l.i - 1);
   info.textContent = l.done === 'ok' ? 'Fertig gezeichnet.' : l.done === 'abort' ? 'Abgebrochen.' : `Zeichnet: Punkt ${l.i} von ${l.n}`;
-  if (l.target === 'img') renderImg(); else if (l.target === 'shape') renderPatterns(); else render();
+  if (l.target === 'img') renderImg(); else if (l.target === 'shape') renderPatterns(); else if (l.target === 'test') { /* Testkreis Einstellungen */ } else render();
 }
 
 /* Zeichenwerkzeuge */
@@ -1227,15 +1239,17 @@ function shapeOutline(key, size) {
   else if (key === 'tri') { const H = size * Math.sqrt(3) / 2; v = [[-size / 2, -H / 3], [size / 2, -H / 3], [0, 2 * H / 3]]; }
   else if (key === 'star') { v = []; for (let k = 0; k < 10; k++) { const a = (90 + 36 * k) * Math.PI / 180, r = k % 2 ? size * 0.382 : size; v.push([r * Math.cos(a), r * Math.sin(a)]); } }
   else { const h = size / 2; return [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h], [-h, h], [h, h], [h, -h], [-h, -h]]; }  // Prüfquadrat
-  // Startpunkt dort, wo die Blickrichtung des Roboters (+x) den Umriss trifft
-  let best = null;
-  for (let k = 0; k < v.length; k++) {
-    const [ax, ay] = v[k], [bx, by] = v[(k + 1) % v.length];
-    if ((ay <= 0 && by > 0) || (by <= 0 && ay > 0)) { const x = ax + (0 - ay) / (by - ay) * (bx - ax); if (x > 0 && (!best || x > best.x)) best = { x, k }; }
-  }
-  const out = [[best.x, 0]];
-  for (let k = 1; k <= v.length; k++) out.push(v[(best.k + k) % v.length]);
-  out.push([best.x, 0]);
+  // 10.11.2026: Start an einem ECKPUNKT (vorher: Mitte einer Kante). Gewählt wird die Ecke
+  // rechts unten bzw. die Ecke, die am nächsten an +x liegt (beim Stern eine Spitze).
+  // Nur äußere Ecken kommen in Frage (beim Stern die Spitzen, nicht die Innenecken).
+  const rmax = Math.max(...v.map(([x, y]) => Math.hypot(x, y)));
+  let bk = 0, ba = Infinity;
+  v.forEach(([x, y], k) => {
+    if (Math.hypot(x, y) < rmax * 0.99) return;
+    const a = Math.atan2(y, x), m = Math.abs(a) + (a > 0 ? 1e-6 : 0); if (m < ba) { ba = m; bk = k; }
+  });
+  const out = [];
+  for (let k = 0; k <= v.length; k++) out.push(v[(bk + k) % v.length]);
   return out.map(([x, y]) => [r1(x), r1(y)]);
 }
 function segDist(px, py, ax, ay, bx, by) {
@@ -1308,14 +1322,42 @@ function shapeOpts() {
 // Liste von Linienzügen; zwischen ihnen fährt der Roboter mit Stift oben
 function shapeStrokes(key, size, o = { fill: 'none', outline: true }) {
   const app = APP_SHAPES.find(a => a.key === key), poly = shapeOutline(key, size);
-  if (!app.fill || o.fill === 'none') return [poly];
-  const strokes = o.outline ? [poly] : [];
-  if (o.fill === 'hatch') strokes.push(...hatchFill(poly, o.gap, o.ang, o.outline ? poly[poly.length - 1] : [0, 0]));
-  else strokes.push(...spiralFill(poly, o.gap, o.outline ? 0 : o.gap / 2));
-  return strokes.filter(s => s.length >= 2);
+  let strokes;
+  if (!app.fill || o.fill === 'none') strokes = [poly];
+  else {
+    strokes = o.outline ? [poly] : [];
+    if (o.fill === 'hatch') strokes.push(...hatchFill(poly, o.gap, o.ang, o.outline ? poly[poly.length - 1] : poly[0]));
+    else strokes.push(...spiralFill(poly, o.gap, o.outline ? 0 : o.gap / 2));
+  }
+  // 10.11.2026: Der Roboter steht am Startpunkt des Umrisses (Ecke bzw. Kreisrand) und schaut
+  // entlang der ersten Kante -- keine Leerfahrt aus der Mitte mehr. Dazu alles so verschieben
+  // und drehen, dass der Startpunkt bei 0,0 liegt und die erste Kante nach +x zeigt.
+  const [x0, y0] = poly[0]; let k = 1;
+  while (k < poly.length - 1 && Math.hypot(poly[k][0] - x0, poly[k][1] - y0) < 0.5) k++;
+  const a = Math.atan2(poly[k][1] - y0, poly[k][0] - x0), ca = Math.cos(-a), sa = Math.sin(-a);
+  const T = ([x, y]) => { const dx = x - x0, dy = y - y0; return [r1(dx * ca - dy * sa), r1(dx * sa + dy * ca)]; };
+  return strokes.filter(s => s.length >= 2).map(s => s.map(T));
 }
 function shapeStroke(key, size, o) { return shapeStrokes(key, size, o).flatMap(s => s.map((p, i) => [p[0], p[1], i ? 1 : 0])); }
 function shapePoints(key, size, o) { return shapeStroke(key, size, o).map(([x, y, pen]) => ({ x, y, pen })); }
+/* Wiederholen (10.11.2026): nach jeder fertigen Form dreht sich der Roboter am Startpunkt
+   um x Grad und zeichnet die Form noch einmal. Die Formen beginnen und enden am Startpunkt
+   (= Roboterposition 0,0), deshalb ist jede Wiederholung einfach die um k·x gedrehte Form.
+   Anzahl 0 = automatisch bis zum vollen Kreis (360/x). */
+function repeatOpts() {
+  const on = $('shapeRep').checked, ang = Math.max(1, Math.min(180, Math.abs(+$('shapeRepAng').value || 30)));
+  const cnt = Math.max(0, Math.min(360, Math.round(+$('shapeRepCnt').value || 0)));
+  return { on, ang, dir: $('shapeRepDir').value, n: on ? (cnt || Math.max(1, Math.round(360 / ang))) : 1 };
+}
+function repeatStroke(stroke, rp) {
+  if (!rp.on || rp.n <= 1) return stroke;
+  const out = [];
+  for (let k = 0; k < rp.n; k++) {
+    const a = (rp.dir === 'l' ? 1 : -1) * rp.ang * k * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    stroke.forEach(([x, y, pen]) => out.push([r1(x * c - y * s), r1(x * s + y * c), pen]));
+  }
+  return out;
+}
 function patSel() { return typeof st.pat === 'string' ? APP_SHAPES.find(a => a.key === st.pat) : null; }
 
 function renderPatterns() {
@@ -1348,16 +1390,17 @@ function renderPatterns() {
     $('shapeFillCtl').hidden = !app.fill;
     const o = app.fill ? shapeOpts() : { fill: 'none', outline: true };
     $('shapeGapF').hidden = o.fill === 'none'; $('shapeAngF').hidden = o.fill !== 'hatch'; $('shapeOutlineF').hidden = o.fill === 'none';
-    const stroke = shapeStroke(app.key, size, o), pts = stroke.map(([x, y, pen]) => ({ x, y, pen })), plan = planRobot(pts, st.cfg);
+    const rp = repeatOpts(), stroke = repeatStroke(shapeStroke(app.key, size, o), rp), pts = stroke.map(([x, y, pen]) => ({ x, y, pen })), plan = planRobot(pts, st.cfg);
+    $('shapeRepAngF').hidden = $('shapeRepDirF').hidden = $('shapeRepCntF').hidden = !rp.on;
     drawPathOn($('patCv'), stroke, { grid: true, robot: true });
     let L = 0, T = 0;
     for (let k = 1; k < stroke.length; k++) { const d = Math.hypot(stroke[k][0] - stroke[k - 1][0], stroke[k][1] - stroke[k - 1][1]); if (stroke[k][2]) L += d; else T += d; }
     const xs = stroke.map(p => p[0]), ys = stroke.map(p => p[1]);
-    $('patTitle').textContent = app.name + (o.fill === 'hatch' ? ' – Linienfüllung' : o.fill === 'spiral' ? ' – Spiralfüllung' : '');
+    $('patTitle').textContent = app.name + (o.fill === 'hatch' ? ' – Linienfüllung' : o.fill === 'spiral' ? ' – Spiralfüllung' : '') + (rp.on ? ` – ${rp.n}× um ${rp.ang}° ${rp.dir === 'l' ? 'links' : 'rechts'} gedreht` : '');
     const tooMany = pts.length > st.cfg.pmax;
     $('patStats').innerHTML = [['Größe', `${Math.round(Math.max(...xs) - Math.min(...xs))} × ${Math.round(Math.max(...ys) - Math.min(...ys))} mm`],
       ['Linie', (L / 10).toFixed(1) + ' cm'], ['Leerfahrt', (T / 10).toFixed(1) + ' cm'], ['Punkte', tooMany ? `<b style="color:var(--stop)">${pts.length} (max. ${st.cfg.pmax})</b>` : pts.length],
-      ['Dauer ca.', fmtTime(plan.total)], ['Start', 'Mitte der Form']]
+      ['Dauer ca.', fmtTime(plan.total)], ['Start', 'Ecke / Rand (grüner Punkt)']]
       .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
     st.shapeCur = { pts, plan };
     $('shapeSend').disabled = st.sending || tooMany;
@@ -1733,6 +1776,12 @@ function init() {
   // Füllung (01.11.2026): Einstellungen gelten für alle Formen und bleiben gespeichert
   $('shapeFill').value = load('shape.fill', 'none'); $('shapeGap').value = load('shape.gap', 5);
   $('shapeAng').value = load('shape.ang', 0); $('shapeOutline').checked = load('shape.outline', true);
+  $('shapeRep').checked = load('shape.rep', false); $('shapeRepAng').value = load('shape.repAng', 30);
+  $('shapeRepDir').value = load('shape.repDir', 'l'); $('shapeRepCnt').value = load('shape.repCnt', 0);
+  ['shapeRep', 'shapeRepAng', 'shapeRepDir', 'shapeRepCnt'].forEach(id => $(id).oninput = $(id).onchange = () => {
+    store('shape.rep', $('shapeRep').checked); store('shape.repAng', +$('shapeRepAng').value);
+    store('shape.repDir', $('shapeRepDir').value); store('shape.repCnt', +$('shapeRepCnt').value); renderPatterns();
+  });
   ['shapeFill', 'shapeGap', 'shapeAng', 'shapeOutline'].forEach(id => $(id).oninput = $(id).onchange = () => {
     store('shape.fill', $('shapeFill').value); store('shape.gap', +$('shapeGap').value);
     store('shape.ang', +$('shapeAng').value); store('shape.outline', $('shapeOutline').checked); renderPatterns();
@@ -1824,7 +1873,9 @@ function init() {
   };
   $('corrOn').onclick = () => corrSet(1);
   ['blR', 'blGap', 'blEnd', 'blSide'].forEach(id => $(id).oninput = $(id).onchange = updateBl);
-  $('blSet').onclick = async () => { const r = blEval(); if (await setValue((r.side === 'l' ? 'SET BLL ' : 'SET BLR ') + r.nw, 'blSt')) $('blGap').value = 0; updateBl(); };
+  $('blCircL').onclick = () => drawTestCircle('l');
+  $('blCircR').onclick = () => drawTestCircle('r');
+  $('blSet').onclick = async () => { const r = blEval(); if (await setValue((r.side === 'l' ? 'SET BLL ' : 'SET BLR ') + r.nw.toFixed(1), 'blSt')) $('blGap').value = 0; updateBl(); };
   $('corrOff').onclick = () => corrSet(0);
   ['spinCntL', 'spinCntR'].forEach(id => $(id).oninput = updateSpin);
   $('spinSet').onclick = async () => {

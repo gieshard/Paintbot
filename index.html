@@ -314,9 +314,15 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
                 <label class="field" id="shapeAngF">Winkel zur Grundlinie (°)<input type="number" id="shapeAng" min="-180" max="180" step="5" value="0"></label>
                 <label id="shapeOutlineF" style="display:flex;align-items:center;gap:6px;align-self:end;padding-bottom:8px"><input type="checkbox" id="shapeOutline" checked> Umriss zeichnen</label>
               </div>
+              <div class="row" style="flex-wrap:wrap;gap:10px">
+                <label style="display:flex;align-items:center;gap:6px;align-self:end;padding-bottom:8px"><input type="checkbox" id="shapeRep"> Wiederholen: danach drehen und nochmal</label>
+                <label class="field" id="shapeRepAngF">Drehen um (°)<input type="number" id="shapeRepAng" min="1" max="180" step="1" value="30" inputmode="decimal"></label>
+                <label class="field" id="shapeRepDirF">Richtung<select id="shapeRepDir"><option value="l">links</option><option value="r">rechts</option></select></label>
+                <label class="field" id="shapeRepCntF">Anzahl (0 = bis voller Kreis)<input type="number" id="shapeRepCnt" min="0" max="360" step="1" value="0"></label>
+              </div>
               <button class="btn primary" id="shapeSend">Zeichnen lassen</button>
               <progress id="shapeProg" max="100" value="0" hidden></progress>
-              <p class="hint" id="shapeInfo">Roboter mit dem Stift auf die Mitte der Form stellen, Blick nach rechts. Er fährt mit Stift oben zum Rand, zeichnet und kommt zurück.</p>
+              <p class="hint" id="shapeInfo">Roboter mit dem Stift auf den Startpunkt stellen (grüner Punkt in der Vorschau – bei Vielecken eine Ecke, beim Kreis ein Punkt auf dem Rand), Blick in Pfeilrichtung entlang der ersten Kante. Er zeichnet von dort und kommt wieder zurück.</p>
             </div>
           </div>
         </div>
@@ -619,7 +625,13 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
         </div>
         <div class="card">
           <h3>Umkehrspiel (Kreise schließen nicht)</h3>
-          <p class="hint">Bei jeder Ecke wechselt ein Rad kurz die Richtung und verliert dabei etwas Weg im Spiel (Welle/Madenschraube, Stacheln). Bei Kreisen aus vielen kleinen Ecken fehlt dann ein Stück. Test: Menü 2 → „Kreis“ (links herum, prüft das <b>linke</b> Rad) bzw. „Kreis rechts herum“ (prüft das <b>rechte</b> Rad) zeichnen, Lücke zwischen Kreisende und Kreisanfang messen.</p>
+          <p class="hint">Bei jeder Ecke wechselt ein Rad kurz die Richtung und verliert dabei etwas Weg im Spiel (Welle/Madenschraube, Stacheln). Bei Kreisen aus vielen kleinen Ecken fehlt dann ein Stück. Test: „Kreis links zeichnen“ (prüft das <b>linke</b> Rad) bzw. „Kreis rechts zeichnen“ (prüft das <b>rechte</b> Rad) – Radius unten einstellbar. Roboter mit dem Stift auf den Kreisrand stellen, dann die Lücke zwischen Kreisende und Kreisanfang messen.</p>
+          <div class="row">
+            <button class="btn" id="blCircL">Kreis links zeichnen</button>
+            <button class="btn" id="blCircR">Kreis rechts zeichnen</button>
+          </div>
+          <progress id="blProg" max="100" value="0" hidden></progress>
+          <p class="hint" id="blInfo"></p>
           <div class="row">
             <label class="field">Kreis<select id="blSide"><option value="l">links herum (linkes Rad)</option><option value="r">rechts herum (rechtes Rad)</option></select></label>
             <label class="field">Radius (mm)<input type="number" id="blR" value="50" min="10" max="250" step="5"></label>
@@ -753,11 +765,11 @@ function pbBanner(t){ var d=document.getElementById('pbBanner'); if(!d){ d=docum
   d.onclick=function(){ d.remove(); }; document.body.appendChild(d); } d.textContent=t+' (Antippen schließt)'; }
 window.addEventListener('error', function(e){ pbBanner('Fehler in der App: '+e.message+(e.filename?' ('+e.filename.split('/').pop()+':'+e.lineno+')':'')); });
 </script>
-<script src="art-gen.js?v=16i"></script>
-<script src="app.js?v=16i"></script>
+<script src="art-gen.js?v=16j2"></script>
+<script src="app.js?v=16j2"></script>
 <script>
 /* Passen index.html und app.js zusammen? Sonst haben neue Knöpfe keine Funktion. */
-(function(){ var need='V16i', v; try { v = APP_VERSION; } catch (e) { v = null; }
+(function(){ var need='V16j', v; try { v = APP_VERSION; } catch (e) { v = null; }
   if (!v || v.indexOf(need) !== 0) pbBanner('app.js ist veraltet (geladen: '+(v||'alte Fassung')+', nötig: '+need+'). Bitte app.js auf GitHub hochladen und die Seite neu laden.'); })();
 </script>
 </body>
