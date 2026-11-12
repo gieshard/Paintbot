@@ -432,7 +432,7 @@ function renderFahren() {
   $('btnPenUp').disabled = !penOk; $('btnPenDown').disabled = !penOk;
   document.querySelectorAll('#speedBtns button').forEach(x => { x.disabled = !st.connected; x.classList.toggle('on', +x.dataset.sp === st.sp); });
 }
-const APP_VERSION = 'V16j-2 (10.11.2026)';
+const APP_VERSION = 'V16j-3 (11.11.2026)';
 function renderCfg() {
   const c = st.cfg, mm = Math.PI * c.wheel / c.spr;
   $('cfgList').innerHTML = [
@@ -1220,6 +1220,13 @@ const APP_SHAPES = [
   { key: 'circleR', name: 'Kreis rechts herum', label: 'Radius (mm)', def: 50, fill: false },   // Umkehrspiel-Test rechtes Rad
   { key: 'rect', name: 'Quadrat', label: 'Seitenlänge (mm)', def: 100, fill: true },
   { key: 'tri', name: 'Dreieck', label: 'Seitenlänge (mm)', def: 120, fill: true },
+  { key: 'arrow', name: 'Pfeil', label: 'Länge (mm)', def: 120, fill: true, noSpiral: true },   // 11.11.2026
+  // 11.11.2026: offene Linienzüge, direkt im Roboter-Koordinatensystem (Start 0,0, Blick +x)
+  { key: 'goat', name: 'Ziege', label: 'Größe (%)', def: 100, fill: false, path: true },
+  { key: 'raster', name: 'Rechteckraster', label: 'Länge x – hoch/runter (mm)', def: 100, fill: false, path: true,
+    p2: { label: 'Abstand y – quer (mm)', def: 20, min: 2, max: 200 }, p3: { label: 'Anzahl Bahnen', def: 6, min: 2, max: 60 } },
+  { key: 'zigzag', name: 'Zickzack', label: 'Zackenbreite (mm)', def: 20, fill: false, path: true,
+    p2: { label: 'Zackenhöhe (mm)', def: 15, min: 2, max: 200 }, p3: { label: 'Anzahl Zacken', def: 8, min: 1, max: 100 } },
   { key: 'star', name: 'Stern', label: 'Außenradius (mm)', def: 70, fill: true },
   { key: 'square', name: 'Prüfquadrat', label: 'Seitenlänge (mm)', def: 100, fill: false },   // links herum, dann rechts herum
 ];
@@ -1237,6 +1244,13 @@ function shapeOutline(key, size) {
   let v;
   if (key === 'rect') { const h = size / 2; v = [[h, -h], [h, h], [-h, h], [-h, -h]]; }
   else if (key === 'tri') { const H = size * Math.sqrt(3) / 2; v = [[-size / 2, -H / 3], [size / 2, -H / 3], [0, 2 * H / 3]]; }
+  else if (key === 'arrow') {   // Spitze nach +x, Mittelpunkt im Schaft
+    const L = size, sw = 0.1 * L, hw = 0.25 * L, hl = 0.35 * L, xb = L / 2 - hl;
+    // Start an der hinteren unteren Schaftecke: erste Kante = Schaft, Pfeil zeigt in Blickrichtung
+    v = [[-L / 2, -sw], [xb, -sw], [xb, -hw], [L / 2, 0], [xb, hw], [xb, sw], [-L / 2, sw]];
+    const out = v.concat([v[0]]);
+    return out.map(([x, y]) => [r1(x), r1(y)]);
+  }
   else if (key === 'star') { v = []; for (let k = 0; k < 10; k++) { const a = (90 + 36 * k) * Math.PI / 180, r = k % 2 ? size * 0.382 : size; v.push([r * Math.cos(a), r * Math.sin(a)]); } }
   else { const h = size / 2; return [[-h, -h], [h, -h], [h, h], [-h, h], [-h, -h], [-h, h], [h, h], [h, -h], [-h, -h]]; }  // Prüfquadrat
   // 10.11.2026: Start an einem ECKPUNKT (vorher: Mitte einer Kante). Gewählt wird die Ecke
@@ -1320,8 +1334,31 @@ function shapeOpts() {
   return { fill: $('shapeFill').value, gap: Math.max(1, Math.min(50, +$('shapeGap').value || 5)), ang: +$('shapeAng').value || 0, outline: $('shapeOutline').checked };
 }
 // Liste von Linienzügen; zwischen ihnen fährt der Roboter mit Stift oben
-function shapeStrokes(key, size, o = { fill: 'none', outline: true }) {
-  const app = APP_SHAPES.find(a => a.key === key), poly = shapeOutline(key, size);
+// Offene Linienzüge (11.11.2026): Start 0,0, Blick nach +x, rechts = −y.
+function shapePath(key, size, p = {}) {
+  const app = APP_SHAPES.find(a => a.key === key);
+  const P2 = p.p2 ?? (app.p2 && app.p2.def), P3 = Math.round(p.p3 ?? (app.p3 && app.p3.def));
+  let pts = [];
+  if (key === 'goat') { const f = size / 100; pts = patternPath(PATTERNS.findIndex(q => q.fw === 'Goat 1')).map(([x, y]) => [x * f, y * f]); }
+  else if (key === 'raster') {
+    // hoch (x) – rechts 90° – quer (y) – rechts 90° – runter (x) – links 90° – quer (y) – links 90° – hoch …
+    const L = size, Y = P2; pts = [[0, 0]];
+    for (let i = 0; i < P3; i++) {
+      const xe = i % 2 === 0 ? L : 0;
+      pts.push([xe, -i * Y]);
+      if (i < P3 - 1) pts.push([xe, -(i + 1) * Y]);
+    }
+  }
+  else if (key === 'zigzag') {
+    const W = size, H = P2; pts = [[0, 0]];
+    for (let i = 0; i < P3; i++) { pts.push([(i + 0.5) * W, H]); pts.push([(i + 1) * W, 0]); }
+  }
+  return [pts.map(([x, y]) => [r1(x), r1(y)])];
+}
+function shapeStrokes(key, size, o = { fill: 'none', outline: true }, p = {}) {
+  const app = APP_SHAPES.find(a => a.key === key);
+  if (app.path) return shapePath(key, size, p);
+  const poly = shapeOutline(key, size);
   let strokes;
   if (!app.fill || o.fill === 'none') strokes = [poly];
   else {
@@ -1338,8 +1375,13 @@ function shapeStrokes(key, size, o = { fill: 'none', outline: true }) {
   const T = ([x, y]) => { const dx = x - x0, dy = y - y0; return [r1(dx * ca - dy * sa), r1(dx * sa + dy * ca)]; };
   return strokes.filter(s => s.length >= 2).map(s => s.map(T));
 }
-function shapeStroke(key, size, o) { return shapeStrokes(key, size, o).flatMap(s => s.map((p, i) => [p[0], p[1], i ? 1 : 0])); }
-function shapePoints(key, size, o) { return shapeStroke(key, size, o).map(([x, y, pen]) => ({ x, y, pen })); }
+function shapeStroke(key, size, o, p) { return shapeStrokes(key, size, o, p).flatMap(s => s.map((q, i) => [q[0], q[1], i ? 1 : 0])); }
+function shapePoints(key, size, o, p) { return shapeStroke(key, size, o, p).map(([x, y, pen]) => ({ x, y, pen })); }
+// Zusatzwerte p2/p3 der gewählten Form aus den Eingabefeldern (begrenzt)
+function shapeParams(app) {
+  const g = (d, id) => d ? Math.max(d.min, Math.min(d.max, +$(id).value || d.def)) : undefined;
+  return { p2: g(app.p2, 'shapeP2'), p3: g(app.p3, 'shapeP3') };
+}
 /* Wiederholen (10.11.2026): nach jeder fertigen Form dreht sich der Roboter am Startpunkt
    um x Grad und zeichnet die Form noch einmal. Die Formen beginnen und enden am Startpunkt
    (= Roboterposition 0,0), deshalb ist jede Wiederholung einfach die um k·x gedrehte Form.
@@ -1373,7 +1415,10 @@ function renderPatterns() {
         st.pat = +v; renderPatterns();
         if (st.connected && await ensureMenu(2)) sendText('PATTERN ' + st.pat);
       } else {
-        st.pat = v; const a = patSel(); $('shapeSize').value = load('shape.' + v, a.def); renderPatterns();
+        st.pat = v; const a = patSel(); $('shapeSize').value = load('shape.' + v, a.def);
+        if (a.p2) $('shapeP2').value = load('shape.' + v + '.p2', a.p2.def);
+        if (a.p3) $('shapeP3').value = load('shape.' + v + '.p3', a.p3.def);
+        renderPatterns();
       }
     };
   }
@@ -1385,12 +1430,19 @@ function renderPatterns() {
   const app = patSel();
   $('patFwCtl').hidden = !!app; $('shapeCtl').hidden = !app;
   if (app) {
-    const size = Math.max(10, Math.min(250, +$('shapeSize').value || app.def));
+    const size = Math.max(10, Math.min(400, +$("shapeSize").value || app.def));
     $('shapeLbl').textContent = app.label;
+    $('shapeP2F').hidden = !app.p2; $('shapeP3F').hidden = !app.p3;
+    if (app.p2) $('shapeP2Lbl').textContent = app.p2.label;
+    if (app.p3) $('shapeP3Lbl').textContent = app.p3.label;
+    const sp = shapeParams(app);
     $('shapeFillCtl').hidden = !app.fill;
+    // Pfeil: Spirale nicht möglich (Form ist vom Mittelpunkt aus nicht ganz sichtbar)
+    $('shapeFill').querySelector('option[value="spiral"]').disabled = !!app.noSpiral;
+    if (app.noSpiral && $('shapeFill').value === 'spiral') $('shapeFill').value = 'hatch';
     const o = app.fill ? shapeOpts() : { fill: 'none', outline: true };
     $('shapeGapF').hidden = o.fill === 'none'; $('shapeAngF').hidden = o.fill !== 'hatch'; $('shapeOutlineF').hidden = o.fill === 'none';
-    const rp = repeatOpts(), stroke = repeatStroke(shapeStroke(app.key, size, o), rp), pts = stroke.map(([x, y, pen]) => ({ x, y, pen })), plan = planRobot(pts, st.cfg);
+    const rp = repeatOpts(), stroke = repeatStroke(shapeStroke(app.key, size, o, sp), rp), pts = stroke.map(([x, y, pen]) => ({ x, y, pen })), plan = planRobot(pts, st.cfg);
     $('shapeRepAngF').hidden = $('shapeRepDirF').hidden = $('shapeRepCntF').hidden = !rp.on;
     drawPathOn($('patCv'), stroke, { grid: true, robot: true });
     let L = 0, T = 0;
@@ -1773,6 +1825,7 @@ function init() {
   ['imgMode', 'imgThr', 'imgLevels', 'imgSpacing', 'imgDetail', 'imgMin', 'imgInvert', 'imgPaper', 'imgSize'].forEach(id => $(id).addEventListener('input', () => { imgLabels(); clearTimeout(imgSt.t); imgSt.t = setTimeout(convertImage, 120); }));
   $('imgShowSrc').onchange = renderImg;
   $('shapeSize').oninput = () => { const a = patSel(); if (a) store('shape.' + a.key, +$('shapeSize').value); renderPatterns(); };
+  ['shapeP2', 'shapeP3'].forEach((id, i) => $(id).oninput = () => { const a = patSel(); if (a) store('shape.' + a.key + (i ? '.p3' : '.p2'), +$(id).value); renderPatterns(); });
   // Füllung (01.11.2026): Einstellungen gelten für alle Formen und bleiben gespeichert
   $('shapeFill').value = load('shape.fill', 'none'); $('shapeGap').value = load('shape.gap', 5);
   $('shapeAng').value = load('shape.ang', 0); $('shapeOutline').checked = load('shape.outline', true);

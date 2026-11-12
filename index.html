@@ -303,7 +303,11 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
               <p class="hint">Gezeichnet wird ab der Stelle, an der der Roboter steht – die erste Strecke in seine Blickrichtung. Tempo beim Zeichnen: Langsam.</p>
             </div>
             <div id="shapeCtl" style="display:grid;gap:10px" hidden>
-              <label class="field"><span id="shapeLbl">Radius (mm)</span><input type="number" id="shapeSize" min="10" max="250" step="5" value="50"></label>
+              <div class="row" style="flex-wrap:wrap;gap:10px">
+                <label class="field"><span id="shapeLbl">Radius (mm)</span><input type="number" id="shapeSize" min="10" max="400" step="5" value="50"></label>
+                <label class="field" id="shapeP2F" hidden><span id="shapeP2Lbl">Wert 2</span><input type="number" id="shapeP2" step="1" value="20" inputmode="decimal"></label>
+                <label class="field" id="shapeP3F" hidden><span id="shapeP3Lbl">Wert 3</span><input type="number" id="shapeP3" step="1" value="6"></label>
+              </div>
               <div id="shapeFillCtl" class="row" style="flex-wrap:wrap;gap:10px">
                 <label class="field">Füllung<select id="shapeFill">
                   <option value="none">keine</option>
@@ -765,8 +769,8 @@ function pbBanner(t){ var d=document.getElementById('pbBanner'); if(!d){ d=docum
   d.onclick=function(){ d.remove(); }; document.body.appendChild(d); } d.textContent=t+' (Antippen schließt)'; }
 window.addEventListener('error', function(e){ pbBanner('Fehler in der App: '+e.message+(e.filename?' ('+e.filename.split('/').pop()+':'+e.lineno+')':'')); });
 </script>
-<script src="art-gen.js?v=16j2"></script>
-<script src="app.js?v=16j2"></script>
+<script src="art-gen.js?v=16j3"></script>
+<script src="app.js?v=16j3"></script>
 <script>
 /* Passen index.html und app.js zusammen? Sonst haben neue Knöpfe keine Funktion. */
 (function(){ var need='V16j', v; try { v = APP_VERSION; } catch (e) { v = null; }

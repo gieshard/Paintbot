@@ -62,13 +62,23 @@ Stop), geht die App mit. **Stop** (oben rechts, Leertaste) hält immer sofort an
    - *Bild hochladen*: JPG/PNG wählen, Verfahren einstellen (siehe unten), Ergebnis
      prüfen, *Bild zeichnen lassen*. Roboter mit dem Stift auf die Blattmitte, Blick
      nach rechts.
-   - *Formen aus der App*: **Kreis**, **Quadrat**, **Dreieck**, **Stern** (Größe wählbar,
-     füllbar) und **Prüfquadrat** (Seitenlänge wählbar).
+   - *Formen aus der App*: **Kreis**, **Quadrat**, **Dreieck**, **Stern**, **Pfeil** (Größe
+     wählbar, füllbar; Pfeil nur mit parallelen Linien), **Prüfquadrat**, außerdem die
+     Linienzüge **Ziege** (Größe in %), **Rechteckraster** (Länge x hoch/runter, Abstand y
+     quer, Anzahl Bahnen – erst rechts herum, dann links herum, im Wechsel) und
+     **Zickzack** (Zackenbreite, Zackenhöhe, Anzahl).
      *Füllung*: **parallele Linien** (Linienabstand, Standard 5 mm, und Winkel zur
      Grundlinie: 0° = parallel zur Unterkante) oder **Kontur nach innen** – eine Spirale,
      deren Windungen dem Umriss im Linienabstand nach innen folgen. *Umriss zeichnen*
      an/aus. Die Vorschau zeigt Leerfahrten gestrichelt; mehr als 1500 Punkte (sehr
-     kleiner Abstand bei großen Formen) lassen sich nicht senden. Der Kreis startet rechts außen und läuft links herum. Das Prüfquadrat
+     kleiner Abstand bei großen Formen) lassen sich nicht senden.
+     **Start:** Der Roboter steht mit dem Stift am Startpunkt der Form – bei Vielecken an
+     einer Ecke (beim Stern an einer Spitze), beim Kreis auf dem Rand – und schaut entlang
+     der ersten Kante (grüner Punkt mit Pfeil in der Vorschau).
+     **Wiederholen:** Haken bei „Wiederholen“ setzen, Winkel und Richtung wählen. Nach
+     jeder fertigen Form dreht sich der Roboter am Startpunkt um diesen Winkel und
+     zeichnet die Form noch einmal – so entstehen Rosetten. Anzahl 0 = so oft, bis ein
+     voller Kreis erreicht ist (360 / Winkel). Der Kreis startet rechts außen und läuft links herum. Das Prüfquadrat
      fährt erst links herum (nur Linksdrehungen), dann dasselbe Quadrat rechts herum
      (nur Rechtsdrehungen): liegen beide genau übereinander, stimmen beide
      Drehrichtungen.
@@ -100,6 +110,15 @@ Danach: aufs Blatt einpassen (*Größe*), Linien vereinfachen (*Vereinfachen*: g
 weniger Punkte), kurze Schnipsel weglassen (*Kürzeste Linie*), Reihenfolge so legen,
 dass die Leerfahrten kurz werden. Der Roboter speichert höchstens 1500 Punkte – die
 App warnt vorher. *Hell und dunkel tauschen* hilft bei hellen Motiven auf dunklem Grund.
+
+### Korrekturen an / aus
+
+Karte *Korrekturen an / aus* in den Einstellungen schaltet alle Korrekturfaktoren
+gemeinsam (Drehfaktor links/rechts, Radfaktoren, Geradeaus-Ausgleich) – zum Vergleichen
+„mit“ und „ohne“. Die Werte bleiben gespeichert. Raddurchmesser und Spurweite bleiben
+immer aktiv. Gilt bis zum Neustart; dauerhaft über `CORRECTIONS_ENABLED` (1/0) in
+`global.h`. Solange die Korrekturen AUS sind, sperrt die App das Übernehmen neuer
+Faktoren (die Messung wäre sonst falsch).
 
 ### Einmessen in drei Schritten (Einstellungen)
 
